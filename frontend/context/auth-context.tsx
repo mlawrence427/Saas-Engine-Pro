@@ -1,103 +1,149 @@
 "use client";
 
-import {
+import React, {
   createContext,
   useContext,
   useEffect,
   useState,
-  ReactNode
+  ReactNode,
 } from "react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, getErrorMessage } from "@/lib/api-client";
 
-type User = {
+// Shape of the user returned from the backend
+export interface User {
   id: string;
   email: string;
   name?: string;
-  role?: string;
-};
+  role: "USER" | "SUBSCRIBER" | "ADMIN";
+}
 
-type AuthContextValue = {
+// Context value shape
+interface AuthContextValue {
   user: User | null;
-  token: string | null;
   loading: boolean;
+  initializing: boolean;
+
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-};
+  register: (data: {
+    email: string;
+    password: string;
+    name?: string;
+  }) => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+}
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "sep_auth";
-
-export function AuthProvider({ children }: { children: ReactNode }) {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
+  const [loading, setLoading] = useState(false);
 
+  /**
+   * Fetch user session on mount
+   * (restores login state on refresh)
+   */
   useEffect(() => {
-    const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-    if (!raw) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw) as { user: User; token: string };
-      setUser(parsed.user);
-      setToken(parsed.token);
-      setLoading(false);
-    } catch {
-      setLoading(false);
-    }
+    const initialize = async () => {
+      try {
+        const res = await apiClient.get("/auth/me");
+        setUser(res.data.user);
+      } catch {
+        setUser(null);
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    initialize();
   }, []);
 
-  async function login(email: string, password: string) {
-    const result = await apiClient.login(email, password);
-    setUser(result.user);
-    setToken(result.token);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: result.user, token: result.token })
-      );
+  /**
+   * LOGIN
+   */
+  const login = async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const res = await apiClient.post("/auth/login", { email, password });
+      setUser(res.data.user);
+    } catch (err) {
+      throw new Error(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
-  }
-
-  async function register(name: string, email: string, password: string) {
-    const result = await apiClient.register(name, email, password);
-    setUser(result.user);
-    setToken(result.token);
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ user: result.user, token: result.token })
-      );
-    }
-  }
-
-  function logout() {
-    setUser(null);
-    setToken(null);
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }
-
-  const value: AuthContextValue = {
-    user,
-    token,
-    loading,
-    login,
-    register,
-    logout
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+  /**
+   * REGISTER
+   */
+  const register = async (data: {
+    email: string;
+    password: string;
+    name?: string;
+  }) => {
+    setLoading(true);
+    try {
+      const res = await apiClient.post("/auth/register", data);
+      setUser(res.data.user);
+    } catch (err) {
+      throw new Error(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
-export function useAuth() {
+  /**
+   * LOGOUT
+   */
+  const logout = async () => {
+    setLoading(true);
+    try {
+      await apiClient.post("/auth/logout");
+      setUser(null);
+    } catch (err) {
+      throw new Error(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Manual refresh — used after billing/subscription changes
+   */
+  const refreshUser = async () => {
+    try {
+      const res = await apiClient.get("/auth/me");
+      setUser(res.data.user);
+    } catch {
+      setUser(null);
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        initializing,
+        login,
+        register,
+        logout,
+        refreshUser,
+      }}
+    >
+      {!initializing && children}
+    </AuthContext.Provider>
+  );
+};
+
+/**
+ * Hook for easy access
+ */
+export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error("useAuth must be used inside an AuthProvider");
   }
   return ctx;
-}
+};
