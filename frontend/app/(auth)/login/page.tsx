@@ -7,11 +7,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/AuthContext"; // FIXED
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +22,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
       await login(email, password);
       router.push("/dashboard");
@@ -78,7 +80,10 @@ export default function LoginPage() {
 
           <p className="text-xs text-center text-sep-muted">
             Don&apos;t have an account?{" "}
-            <Link href="/auth/register" className="text-sep-primary underline-offset-2 hover:underline">
+            <Link
+              href="/auth/register"
+              className="text-sep-primary underline-offset-2 hover:underline"
+            >
               Create one
             </Link>
           </p>
@@ -87,4 +92,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 
