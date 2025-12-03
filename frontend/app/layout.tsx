@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ReactNode } from "react";
 import { SiteHeader } from "@/components/layout/site-header";
-import { AuthProvider } from "@/context/auth-context";
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
   title: "SaaS Engine Pro",
-  description: "A universal SaaS starter kit for launching any online product faster."
+  description: "A universal SaaS starter kit for launching any online product faster.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: {
   children: ReactNode;
 }) {
@@ -27,4 +27,3 @@ export default function RootLayout({
     </html>
   );
 }
-
