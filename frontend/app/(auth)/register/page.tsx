@@ -7,11 +7,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/AuthContext"; // FIXED
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,7 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register({ name, email, password }); // FIXED
       router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message || "Failed to register.");
@@ -89,7 +90,10 @@ export default function RegisterPage() {
 
           <p className="text-xs text-center text-sep-muted">
             Already have an account?{" "}
-            <Link href="/auth/login" className="text-sep-primary underline-offset-2 hover:underline">
+            <Link
+              href="/auth/login"
+              className="text-sep-primary underline-offset-2 hover:underline"
+            >
               Log in
             </Link>
           </p>
@@ -98,4 +102,5 @@ export default function RegisterPage() {
     </div>
   );
 }
+
 
