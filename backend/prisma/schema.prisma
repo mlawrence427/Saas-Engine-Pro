@@ -8,26 +8,34 @@ datasource db {
 }
 
 model User {
-  id            String          @id @default(cuid())
-  email         String          @unique
-  passwordHash  String
-  name          String?
-  role          String          @default("USER")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  subscriptions Subscription[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  password        String
+  stripeCustomer  StripeCustomer?
+  subscriptions   StripeSubscription[]
+  createdAt       DateTime         @default(now())
 }
 
-model Subscription {
-  id         String   @id @default(cuid())
-  userId     String
-  stripeId   String
-  plan       String
-  status     String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id])
+model StripeCustomer {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  customerId  String   @unique        // Stripe's ID
+  createdAt   DateTime @default(now())
 }
+
+model StripeSubscription {
+  id             String   @id @default(cuid())
+  stripeId       String   @unique        // Stripe subscription ID
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+
+  status         String
+  priceId        String
+  currentPeriodEnd DateTime
+
+  createdAt DateTime @default(now())
+}
+
 
 
