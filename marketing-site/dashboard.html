@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard – SaaS Engine Pro</title>
+  <link href="./dist/output.css" rel="stylesheet">
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+<!-- ========= SIDEBAR ========= -->
+<div class="flex min-h-screen">
+
+  <aside class="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 p-6 space-y-6 hidden md:block">
+    <h2 class="text-xl font-bold">SaaS Engine Pro</h2>
+
+    <nav class="space-y-3">
+      <a href="#" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🏠 Dashboard</a>
+      <a href="ai-tools.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🤖 AI Tools</a>
+      <a href="billing.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">💳 Billing</a>
+      <a href="account.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">⚙️ Account</a>
+      <a href="admin.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🔐 Admin</a>
+    </nav>
+  </aside>
+
+  <!-- ========= MAIN AREA ========= -->
+  <main class="flex-1 p-6">
+
+    <!-- ========= TOP BAR ========= -->
+    <header class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">Welcome back</h1>
+
+      <div class="flex items-center space-x-4">
+        <button id="modeToggle" class="text-2xl">🌙</button>
+        <button id="logoutBtn" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded">
+          Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- ========= DASHBOARD CONTENT ========= -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Card 1: Subscription Status -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-2">Subscription</h2>
+        <p class="text-sm opacity-80 mb-4">Your current subscription status:</p>
+        <p id="subStatus" class="font-bold text-green-500">Active (placeholder)</p>
+        <button class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">
+          Manage Billing
+        </button>
+      </div>
+
+      <!-- Card 2: AI Tools -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-2">AI Toolkit</h2>
+        <p class="text-sm opacity-80 mb-4">Access your AI-powered features.</p>
+        <a href="ai-tools.html" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded inline-block">
+          Open AI Tools
+        </a>
+      </div>
+
+      <!-- Card 3: Account Info -->
+      <div class="bg-white dark:bg-gray-800 shadow rounded p-6">
+        <h2 class="text-xl font-semibold mb-2">Account</h2>
+        <p class="text-sm opacity-80 mb-4">Account details and preferences.</p>
+        <a href="account.html" class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded inline-block">
+          Account Settings
+        </a>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- ========= DARK MODE SCRIPT ========= -->
+<script>
+  document.getElementById("modeToggle").onclick = () => {
+    document.documentElement.classList.toggle("dark");
+    localStorage.theme = document.documentElement.classList.contains("dark")
+      ? "dark" : "light";
+  };
+</script>
+
+</body>
+</html>
