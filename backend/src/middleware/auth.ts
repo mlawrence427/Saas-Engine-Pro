@@ -1,43 +1,24 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import { AuthUser } from '../types/auth';
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET missing in environment variables');
-}
-
-export function authMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  const authHeader = req.headers.authorization || '';
-
-  const token = authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7)
-    : null;
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ message: 'Missing authorization token' });
+    return res.status(401).json({ message: "Missing authorization token" });
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.error("❌ JWT_SECRET missing in environment variables");
+    return res.status(500).json({ message: "Server misconfiguration: missing JWT_SECRET" });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & Partial<AuthUser>;
-
-    if (!decoded.userId || !decoded.email || !decoded.role) {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-
-    req.user = {
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role as AuthUser['role'],
-    };
-
+    const decoded = jwt.verify(token, secret) as any;
+    req.user = decoded;
     next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Invalid or expired token' });
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid token" });
   }
 }

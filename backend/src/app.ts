@@ -1,30 +1,32 @@
 // src/app.ts
 
-import express from 'express';
-import cors from 'cors';
+import dotenv from "dotenv";
+dotenv.config();
 
-// ===== ROUTES =====
-import { authRouter } from './routes/auth.routes';
-import { userRouter } from './routes/user.routes';
+import express from "express";
+import cors from "cors";
 
-// ===== CREATE APP =====
+// ✅ You MUST import the route files
+import authRoutes from "./api/auth/auth.routes";
+import userRoutes from "./api/user/routes";
+
 export function createApp() {
   const app = express();
 
-  // Middleware
+  // ======== Middlewares ========
   app.use(cors());
   app.use(express.json());
 
-  // Health Check
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok' });
+  // ======== Health Check ========
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok" });
   });
 
-  // Public Auth Routes (Register + Login)
-  app.use('/api/auth', authRouter);
+  // ======== Auth routes ========
+  app.use("/api/auth", authRoutes);
 
-  // Protected User Routes (requires JWT)
-  app.use('/api/user', userRouter);
+  // ======== Protected user routes ========
+  app.use("/api/user", userRoutes);
 
   return app;
 }
