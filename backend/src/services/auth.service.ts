@@ -10,8 +10,13 @@ import { RegisterInput, LoginInput, UpdateProfileInput, ChangePasswordInput } fr
 import crypto from 'crypto';
 
 export const authService = {
+
+  //----------------------------------
+  // REGISTER
+  //----------------------------------
   async register(data: RegisterInput) {
-    // Check if user already exists
+
+    // Check if email already exists
     const existing = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     });
@@ -20,13 +25,16 @@ export const authService = {
       throw new ConflictError('Email already registered');
     }
 
-    // Create user
+    // Hash password
     const passwordHash = await hashPassword(data.password);
+
+    // Create user (correct field: passwordHash, NOT password)
     const user = await prisma.user.create({
       data: {
         email: data.email.toLowerCase(),
-        name: data.name,
-        passwordHash,
+        name: data.name ?? null,
+        passwordHash: passwordHash,
+        role: "USER",
       },
       select: {
         id: true,
@@ -37,7 +45,7 @@ export const authService = {
       },
     });
 
-    // Generate token
+    // Issue JWT
     const token = generateToken({
       id: user.id,
       email: user.email,
@@ -47,8 +55,10 @@ export const authService = {
     return { user, token };
   },
 
+  //----------------------------------
+  // LOGIN
+  //----------------------------------
   async login(data: LoginInput) {
-    // Find user
     const user = await prisma.user.findUnique({
       where: { email: data.email.toLowerCase() },
     });
@@ -57,13 +67,11 @@ export const authService = {
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // Verify password
     const valid = await comparePassword(data.password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedError('Invalid email or password');
     }
 
-    // Generate token
     const token = generateToken({
       id: user.id,
       email: user.email,
@@ -81,6 +89,9 @@ export const authService = {
     };
   },
 
+  //----------------------------------
+  // GET PROFILE
+  //----------------------------------
   async getProfile(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -101,8 +112,10 @@ export const authService = {
     return user;
   },
 
+  //----------------------------------
+  // UPDATE PROFILE
+  //----------------------------------
   async updateProfile(userId: string, data: UpdateProfileInput) {
-    // Check if email is being changed and is already taken
     if (data.email) {
       const existing = await prisma.user.findFirst({
         where: {
@@ -116,7 +129,7 @@ export const authService = {
       }
     }
 
-    const user = await prisma.user.update({
+    return prisma.user.update({
       where: { id: userId },
       data: {
         ...(data.name && { name: data.name }),
@@ -129,26 +142,23 @@ export const authService = {
         role: true,
       },
     });
-
-    return user;
   },
 
+  //----------------------------------
+  // CHANGE PASSWORD
+  //----------------------------------
   async changePassword(userId: string, data: ChangePasswordInput) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
 
     if (!user || !user.passwordHash) {
       throw new NotFoundError('User not found');
     }
 
-    // Verify current password
     const valid = await comparePassword(data.currentPassword, user.passwordHash);
     if (!valid) {
       throw new BadRequestError('Current password is incorrect');
     }
 
-    // Update password
     const newHash = await hashPassword(data.newPassword);
     await prisma.user.update({
       where: { id: userId },
@@ -158,57 +168,55 @@ export const authService = {
     return { success: true };
   },
 
+  //----------------------------------
+  // FORGOT PASSWORD
+  //----------------------------------
   async forgotPassword(email: string) {
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
-    // Always return success to prevent email enumeration
-    if (!user) {
-      return { success: true };
-    }
+    if (!user) return { success: true };
 
-    // Generate reset token
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     await prisma.passwordResetToken.create({
       data: {
         token,
         userId: user.id,
-        expiresAt,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60), // 1 hour
       },
     });
 
-    // TODO: Send email with reset link
-    // For now, just log the token in development
     if (process.env.NODE_ENV === 'development') {
-      console.log(`Password reset token for ${email}: ${token}`);
+      console.log(`Reset token for ${email}: ${token}`);
     }
 
     return { success: true };
   },
 
+  //----------------------------------
+  // RESET PASSWORD
+  //----------------------------------
   async resetPassword(token: string, newPassword: string) {
-    const resetToken = await prisma.passwordResetToken.findUnique({
+    const record = await prisma.passwordResetToken.findUnique({
       where: { token },
       include: { user: true },
     });
 
-    if (!resetToken || resetToken.expiresAt < new Date()) {
+    if (!record || record.expiresAt < new Date()) {
       throw new BadRequestError('Invalid or expired reset token');
     }
 
-    // Update password
-    const passwordHash = await hashPassword(newPassword);
+    const hash = await hashPassword(newPassword);
+
     await prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { passwordHash },
+      where: { id: record.userId },
+      data: { passwordHash: hash },
     });
 
-    // Delete used token
     await prisma.passwordResetToken.delete({
-      where: { id: resetToken.id },
+      where: { id: record.id },
     });
 
     return { success: true };
@@ -216,3 +224,4 @@ export const authService = {
 };
 
 export default authService;
+
