@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tools – SaaS Engine Pro</title>
+  <link href="./dist/output.css" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+<script src="/script.js" defer></script>
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+  <div class="max-w-3xl mx-auto p-6">
+    <h1 class="text-4xl font-bold mb-6">AI Document Analyzer</h1>
+
+    <textarea id="inputText"
+      class="w-full h-40 p-4 rounded bg-gray-200 dark:bg-gray-800"
+      placeholder="Paste text here for analysis..."></textarea>
+
+    <button id="analyzeBtn"
+      class="mt-4 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded">
+      Analyze with AI
+    </button>
+
+    <div id="resultBox" class="mt-6 p-4 bg-gray-200 dark:bg-gray-800 rounded hidden">
+      <h2 class="text-2xl font-semibold mb-2">Analysis Result</h2>
+      <pre id="resultText" class="whitespace-pre-wrap"></pre>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:3001/api/ai"; // backend routes
+
+    document.getElementById("analyzeBtn").addEventListener("click", async () => {
+      const text = document.getElementById("inputText").value.trim();
+
+      if (!text) {
+        alert("Please enter text first.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+
+        const data = await res.json();
+
+        document.getElementById("resultText").textContent =
+          data.analysis || "No response";
+
+        document.getElementById("resultBox").classList.remove("hidden");
+
+      } catch (err) {
+        console.error("Frontend AI Error:", err);
+        alert("AI request failed. Check console.");
+      }
+    });
+  </script>
+
+</body>
+</html>
+
+
