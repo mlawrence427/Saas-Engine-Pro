@@ -1,4 +1,5 @@
 // src/app.ts
+
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -8,7 +9,7 @@ import cors from "cors";
 // ===== IMPORT ROUTE FILES =====
 import authRoutes from "./api/auth/auth.routes";
 import userRoutes from "./api/user/routes";
-import aiRoutes from "./api/ai.routes";   // 👈 ADD THIS LINE
+import aiRoutes from "./routes/ai.routes";   // ✅ FIXED PATH
 
 export function createApp() {
   const app = express();
@@ -28,8 +29,8 @@ export function createApp() {
   // ===== PROTECTED USER ROUTES =====
   app.use("/api/user", userRoutes);
 
-  // ===== AI ROUTE (Claude Backend) =====
-  app.use("/api/ai", aiRoutes);   // 👈 REQUIRED FOR Claude integration
+  // ===== AI ROUTES (Claude Backend) =====
+  app.use("/api/ai", aiRoutes);   // This must be LAST
 
   return app;
 }

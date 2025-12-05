@@ -1,17 +1,20 @@
-import { Router, Request, Response } from "express";
+// backend/src/routes/ai.routes.ts
+
+import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 
 const router = Router();
 
-const client = new Anthropic({
+// Claude client
+const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY!,
 });
 
-/**
- * POST /api/ai/chat
- * Body: { message: string }
- */
-router.post("/chat", async (req: Request, res: Response) => {
+// ============================================================
+// 1) CHAT ENDPOINT — POST /api/ai/chat
+// ============================================================
+
+router.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
@@ -19,25 +22,58 @@ router.post("/chat", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    const response = await client.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 500,
+    const reply = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 300,
       messages: [
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: message,
+        },
       ],
     });
 
-    const reply = response.content[0].text;
-
-    return res.json({ reply });
-  } catch (err: any) {
-    console.error("Claude API Error:", err);
-    return res.status(500).json({
-      error: "Claude request failed",
-      details: err?.message || err,
+    return res.json({
+      reply: reply.content[0].text,
     });
+  } catch (err) {
+    console.error("Claude Chat Error:", err);
+    return res.status(500).json({ error: "AI chat failed" });
   }
 });
 
+// ============================================================
+// 2) DOCUMENT ANALYZER — POST /api/ai/analyze
+// ============================================================
+
+router.post("/analyze", async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: "Text is required" });
+    }
+
+    const reply = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 500,
+      messages: [
+        {
+          role: "user",
+          content: `Analyze this text:\n\n${text}`,
+        },
+      ],
+    });
+
+    return res.json({
+      analysis: reply.content[0].text,
+    });
+  } catch (err) {
+    console.error("Claude Analyze Error:", err);
+    return res.status(500).json({ error: "AI analysis failed" });
+  }
+});
+
+// ===== EXPORT ROUTER =====
 export default router;
 
