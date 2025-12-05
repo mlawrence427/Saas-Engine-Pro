@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tools | SaaS Engine Pro</title>
+  <link href="./dist/output.css" rel="stylesheet" />
+</head>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+<!-- ======== SIDEBAR ======== -->
+<div class="flex min-h-screen">
+
+  <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-700 p-6 space-y-6 hidden md:block">
+    <h2 class="text-xl font-bold">SaaS Engine Pro</h2>
+
+    <nav class="space-y-3">
+      <a href="dashboard.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">📊 Dashboard</a>
+      <a href="ai-tools.html" class="block py-2 px-3 rounded bg-gray-200 dark:bg-gray-700 font-semibold">🤖 AI Tools</a>
+      <a href="billing.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">💳 Billing</a>
+      <a href="account.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">⚙️ Account</a>
+      <a href="admin.html" class="block py-2 px-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🔐 Admin</a>
+    </nav>
+  </aside>
+
+  <!-- Mobile nav item -->
+  <li class="md:hidden list-none p-4">
+    <a href="ai-tools.html" class="flex items-center gap-2 px-4 py-2 hover:bg-gray-800 rounded">
+      🤖 AI Tools
+    </a>
+  </li>
+
+  <!-- ======== MAIN AREA ======== -->
+  <main class="flex-1 p-6">
+
+    <!-- ======== TOP BAR ======== -->
+    <header class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">AI Tools</h1>
+
+      <div class="flex items-center gap-4">
+        <button id="modeToggle" class="text-2xl">🌙</button>
+        <button id="logoutBtn" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded">Logout</button>
+      </div>
+    </header>
+
+    <!-- ======== CONTENT ======== -->
+    <section class="space-y-8">
+
+      <!-- AI Tool Card 1 -->
+      <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-3">AI Text Analysis</h2>
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
+          Sentiment analysis, keyword extraction, and summarization.
+        </p>
+        <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">
+          Open Tool
+        </button>
+      </div>
+
+      <!-- AI Tool Card 2 -->
+      <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-3">AI Document Assistant</h2>
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
+          Upload or paste text to get instant insights.
+        </p>
+        <button class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded">
+          Open Tool
+        </button>
+      </div>
+
+      <!-- AI Tool Card 3 -->
+      <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-3">AI Code Helper</h2>
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
+          Get code explanations, refactoring, and generation.
+        </p>
+        <button class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">
+          Open Tool
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+</div>
+
+<!-- ======== DARK MODE SCRIPT ======== -->
+<script>
+document.getElementById("modeToggle").addEventListener("click", () => {
+  document.documentElement.classList.toggle("dark");
+});
+</script>
+
+</body>
+</html>
+
+

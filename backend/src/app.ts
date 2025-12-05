@@ -1,32 +1,35 @@
 // src/app.ts
-
 import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
 import cors from "cors";
 
-// ✅ You MUST import the route files
+// ===== IMPORT ROUTE FILES =====
 import authRoutes from "./api/auth/auth.routes";
 import userRoutes from "./api/user/routes";
+import aiRoutes from "./api/ai.routes";   // 👈 ADD THIS LINE
 
 export function createApp() {
   const app = express();
 
-  // ======== Middlewares ========
+  // ===== MIDDLEWARE =====
   app.use(cors());
   app.use(express.json());
 
-  // ======== Health Check ========
+  // ===== HEALTH CHECK =====
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  // ======== Auth routes ========
+  // ===== AUTH ROUTES =====
   app.use("/api/auth", authRoutes);
 
-  // ======== Protected user routes ========
+  // ===== PROTECTED USER ROUTES =====
   app.use("/api/user", userRoutes);
+
+  // ===== AI ROUTE (Claude Backend) =====
+  app.use("/api/ai", aiRoutes);   // 👈 REQUIRED FOR Claude integration
 
   return app;
 }

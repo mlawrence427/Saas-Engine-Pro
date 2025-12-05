@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Chat | SaaS Engine Pro</title>
+  <link href="./dist/output.css" rel="stylesheet" />
+</head>
+<!-- ========= CHAT SCRIPT (FINAL VERSION) ========= -->
+<script>
+/* ========= ELEMENT REFS ========= */
+const chatLog = document.getElementById("chatLog");
+const input = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+
+/* ========= CHAT HISTORY (LOAD ON PAGE OPEN) ========= */
+function loadChatHistory() {
+    const history = JSON.parse(localStorage.getItem("chatHistory") || "[]");
+
+    history.forEach(msg => {
+        addMessage(msg.text, msg.sender, false); // false = do NOT save again
+    });
+}
+
+/* ========= SAVE MESSAGE TO HISTORY ========= */
+function saveMessage(text, sender) {
+    const history = JSON.parse(localStorage.getItem("chatHistory") || "[]");
+
+    history.push({ text, sender });
+    localStorage.setItem("chatHistory", JSON.stringify(history));
+}
+
+/* ========= ADD A MESSAGE BUBBLE ========= */
+function addMessage(text, sender, save = true) {
+    const msg = document.createElement("div");
+
+    msg.className =
+        sender === "user"
+            ? "text-right text-blue-400 my-2"
+            : "text-left text-gray-200 my-2";
+
+    msg.innerText = text;
+    chatLog.appendChild(msg);
+
+    if (save) saveMessage(text, sender);
+
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+/* ========= SEND BUTTON CLICK ========= */
+sendBtn.addEventListener("click", () => {
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage(text, "user");
+    input.value = "";
+
+    // Simulated AI reply (replace with real API later)
+    // Real Claude backend request
+fetch("/api/ai/chat", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: text }),
+})
+  .then(res => res.json())
+  .then(data => {
+    addMessage("🤖 " + data.reply, "ai");
+  })
+  .catch(err => {
+    console.error(err);
+    addMessage("⚠️ AI Error: Unable to process your request.", "ai");
+  });
+
+/* ========= ENTER KEY TO SEND ========= */
+input.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendBtn.click();
+});
+
+/* ========= INITIALIZE CHAT ON PAGE LOAD ========= */
+loadChatHistory();
+</script>
+
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+<!-- ======== LAYOUT WRAPPER ======== -->
+<div class="flex min-h-screen">
+
+  <!-- ======== SIDEBAR ======== -->
+  <aside class="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 p-6 space-y-6">
+    <h2 class="text-xl font-bold">SaaS Engine Pro</h2>
+
+    <nav class="space-y-3">
+      <a href="dashboard.html" class="block px-2 py-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">📊 Dashboard</a>
+      <a href="ai-tools.html" class="block px-2 py-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🛠 AI Tools</a>
+      <a href="ai-chat.html" class="block px-2 py-3 rounded bg-blue-600 text-white hover:bg-blue-700">💬 AI Chat</a>
+      <a href="billing.html" class="block px-2 py-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">💳 Billing</a>
+      <a href="account.html" class="block px-2 py-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">⚙️ Account</a>
+      <a href="admin.html" class="block px-2 py-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700">🔐 Admin</a>
+    </nav>
+  </aside>
+
+  <!-- ======== MAIN AREA ======== -->
+  <section class="max-w-3xl mx-auto space-y-4">
+
+  <h2 class="text-2xl font-bold mb-4">AI Chat Assistant</h2>
+
+  <!-- Chat Window -->
+  <div id="chatWindow" class="h-96 overflow-y-auto p-4 border border-gray-700 bg-gray-900 rounded-lg space-y-4">
+    <!-- Messages will be inserted here -->
+  </div>
+
+  <!-- Chat Input -->
+  <div class="mt-4 flex gap-2">
+    <input 
+      id="chatInput"
+      type="text"
+      placeholder="Ask me anything..."
+      class="flex-1 px-4 py-2 rounded bg-gray-800 text-white border border-gray-600"
+    />
+    <button 
+      id="sendBtn"
+      class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white"
+    >
+      Send
+    </button>
+  </div>
+
+</section>
+
+<script>
+// ===== Chat Logic ===== //
+
+const chatWindow = document.getElementById("chatWindow");
+const chatInput = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+
+function addMessage(text, sender = "user") {
+  const bubble = document.createElement("div");
+
+  bubble.className =
+    sender === "user"
+      ? "bg-blue-600 text-white p-3 rounded-lg w-fit ml-auto"
+      : "bg-gray-700 text-white p-3 rounded-lg w-fit";
+
+  bubble.innerText = text;
+  chatWindow.appendChild(bubble);
+
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+sendBtn.addEventListener("click", () => {
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  addMessage(text, "user");
+  chatInput.value = "";
+
+  // TEMP AI REPLY (replace later with backend API call)
+  setTimeout(() => {
+    addMessage("This is an AI placeholder response.", "ai");
+  }, 600);
+});
+
+// Send with Enter key
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendBtn.click();
+});
+</script>
+
+
+    <!-- TOP BAR -->
+    <header class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold">AI Chat</h1>
+
+      <div class="flex items-center gap-4">
+        <button id="modeToggle" class="text-2xl">🌙</button>
+        <button id="logoutBtn" class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Logout</button>
+      </div>
+    </header>
+
+    <!-- ======== CHAT BOX ======== -->
+    <div class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6 shadow-md max-w-3xl">
+      
+      <div id="chatLog" class="space-y-4 max-h-[500px] overflow-y-auto mb-4">
+        <!-- Messages will appear here -->
+      </div>
+
+      <div class="flex gap-3">
+        <input 
+          id="chatInput"
+          type="text"
+          placeholder="Ask me anything..."
+          class="flex-1 px-4 py-2 rounded border dark:border-gray-600 bg-gray-100 dark:bg-gray-700"
+        />
+
+        <button 
+          id="sendBtn"
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white">
+          Send
+        </button>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<!-- ======== DARK MODE SCRIPT ======== -->
+<script>
+document.getElementById("modeToggle").addEventListener("click", () => {
+  document.documentElement.classList.toggle("dark");
+});
+</script>
+
+<!-- ======== CHAT SCRIPT ======== -->
+<!-- ========= CHAT SCRIPT ========= -->
+<script>
+const chatLog = document.getElementById("chatWindow");
+const input = document.getElementById("chatInput");
+const sendBtn = document.getElementById("sendBtn");
+
+function addMessage(text, sender) {
+    const msg = document.createElement("div");
+
+    msg.className =
+        sender === "user"
+            ? "text-right text-blue-400 my-2"
+            : "text-left text-gray-200 my-2";
+
+    msg.innerText = text;
+    chatLog.appendChild(msg);
+
+    // Auto scroll to bottom
+    chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+// Handle send button click
+sendBtn.addEventListener("click", () => {
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage(text, "user");
+
+    input.value = "";
+
+    // Placeholder AI response
+    setTimeout(() => {
+        addMessage("🤖 AI: (placeholder) I received your message!", "ai");
+    }, 500);
+});
+
+// Allow Enter key to send
+input.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+        sendBtn.click();
+    }
+});
+</script>
