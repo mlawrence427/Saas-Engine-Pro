@@ -1,0 +1,9 @@
+{
+  "key": "claude-chat",
+  "name": "Claude Chat",
+  "description": "Premium AI chat module powered by Claude.",
+  "version": "1.0.0",
+  "basePath": "/",
+  "allowedPlans": ["founders", "pro-founders"],
+  "isPremium": true
+}

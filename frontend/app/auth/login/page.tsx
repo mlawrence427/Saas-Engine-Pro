@@ -1,90 +1,109 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import Link from "next/link";
+import React, { useState, FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
-  const { login, loading } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const router = useRouter();
+  const { login, isLoading: authLoading, user } = useAuth();
+
+  const [email, setEmail] = useState("test@example.com");
+  const [password, setPassword] = useState("password123");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    const err = await login(email, password);
-    if (err) {
-      setError(err);
+  // If already logged in, send to dashboard
+  if (user) {
+    if (typeof window !== "undefined") {
+      router.replace("/dashboard");
     }
+    return null;
   }
 
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      await login(email, password);
+      // ✅ Login succeeded – go to dashboard
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err?.message || "Login failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const loading = authLoading || submitting;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white">
-      <div className="w-full max-w-md space-y-6 border border-zinc-800 rounded-xl p-8 bg-zinc-950/70">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">Log in</h1>
-          <p className="text-sm text-zinc-400">
-            Use your SaaS Engine Pro account.
-          </p>
-        </div>
+    <main className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-800 p-8 shadow-lg">
+        <h1 className="text-2xl font-semibold text-center mb-2">Log in</h1>
+        <p className="text-sm text-zinc-400 text-center mb-6">
+          Use your SaaS Engine Pro account.
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
+          <div className="space-y-1">
+            <label className="text-sm text-zinc-300" htmlFor="email">
+              Email
+            </label>
+            <input
               id="email"
               type="email"
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
+              className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm outline-none focus:border-blue-500"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
+          <div className="space-y-1">
+            <label className="text-sm text-zinc-300" htmlFor="password">
+              Password
+            </label>
+            <input
               id="password"
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
+              className="w-full rounded-md bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm outline-none focus:border-blue-500"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
+            <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
               {error}
             </p>
           )}
 
-          <Button
+          <button
             type="submit"
-            className="w-full"
             disabled={loading}
+            className="w-full rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed py-2 text-sm font-medium"
           >
             {loading ? "Logging in..." : "Log in"}
-          </Button>
+          </button>
         </form>
 
-        <p className="text-center text-sm text-zinc-400">
+        <p className="mt-4 text-xs text-zinc-500 text-center">
           Don&apos;t have an account?{" "}
-          <Link
+          <a
             href="/auth/register"
-            className="text-blue-400 hover:underline"
+            className="text-blue-400 hover:text-blue-300"
           >
             Create one
-          </Link>
+          </a>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
+
 
 

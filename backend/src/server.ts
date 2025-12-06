@@ -1,72 +1,50 @@
-import { createApp } from './app';
-import { prisma } from './utils/prisma';
-import { logger } from './utils/logger';
+// backend/src/server.ts
+import dotenv from "dotenv";
+dotenv.config();
 
-// ==============================================
-// Server Configuration
-// ==============================================
-const PORT = parseInt(process.env.PORT || '4000', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+import { createApp } from "./app";
+import { prisma } from "./utils/prisma";
 
-// ==============================================
-// Graceful Shutdown Handler
-// ==============================================
-async function gracefulShutdown(signal: string): Promise<void> {
-  logger.info(`Received ${signal}. Starting graceful shutdown...`);
-  
+const PORT = Number(process.env.PORT) || 3001;
+
+async function startServer() {
   try {
-    // Disconnect from database
-    await prisma.$disconnect();
-    logger.info('Database connection closed');
-    
-    process.exit(0);
-  } catch (error) {
-    logger.error('Error during shutdown', { error });
-    process.exit(1);
-  }
-}
-
-// ==============================================
-// Start Server
-// ==============================================
-async function startServer(): Promise<void> {
-  try {
-    // Test database connection
+    // Connect to the database
     await prisma.$connect();
-    logger.info('Database connected successfully');
+    console.log("[INFO] Database connected successfully");
 
-    // Create Express app
     const app = createApp();
 
-    // Start listening
-    const server = app.listen(PORT, HOST, () => {
-      logger.info(`🚀 Server running on http://${HOST}:${PORT}`);
-      logger.info(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`📚 API docs: http://${HOST}:${PORT}/api/health`);
+    app.listen(PORT, "0.0.0.0", () => {
+      const env = process.env.NODE_ENV || "development";
+
+      console.log(`[INFO] 🚀 Server running on http://0.0.0.0:${PORT}`);
+      console.log(`[INFO] 📦 Environment: ${env}`);
+      console.log(
+        `[INFO] 📚 API docs: http://0.0.0.0:${PORT}/api/health`
+      );
     });
-
-    // Handle graceful shutdown
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-    // Handle uncaught errors
-    process.on('uncaughtException', (error) => {
-      logger.error('Uncaught exception', { error: error.message, stack: error.stack });
-      gracefulShutdown('uncaughtException');
-    });
-
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.error('Unhandled rejection', { reason, promise });
-    });
-
   } catch (error) {
-    logger.error('Failed to start server', { error });
-    await prisma.$disconnect();
+    console.error("[ERROR] Failed to start server", error);
     process.exit(1);
   }
 }
 
-// ==============================================
-// Run Server
-// ==============================================
+// Graceful shutdown
+async function shutdown() {
+  console.log("[INFO] Shutting down gracefully...");
+  try {
+    await prisma.$disconnect();
+    console.log("[INFO] Database connection closed");
+  } catch (err) {
+    console.error("[ERROR] Error during shutdown", err);
+  } finally {
+    process.exit(0);
+  }
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
 startServer();
+

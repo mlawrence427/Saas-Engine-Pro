@@ -1,41 +1,39 @@
+// backend/src/api/user/routes.ts
 import { Router, Response } from "express";
-import prisma from "../../utils/prisma";
+import { prisma } from "../../utils/prisma";
 import { requireAuth, AuthRequest } from "../../middleware/requireAuth";
 
 const router = Router();
 
-// GET /api/user/me
-router.get("/me", requireAuth, async (req: AuthRequest, res: Response) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
+// ==================== GET /api/user/me ====================
+router.get(
+  "/me",
+  requireAuth,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // ✅ req.user.id comes from the JWT in requireAuth
+      const user = await prisma.user.findUnique({
+        where: {
+          id: req.user!.id, // IMPORTANT: use a unique field
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true,
+        },
       });
-    }
 
-    return res.json({
-      success: true,
-      user,
-    });
-  } catch (error) {
-    console.error("Error in /api/user/me:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      return res.json(user);
+    } catch (err) {
+      console.error("Error in GET /api/user/me:", err);
+      return res.status(500).json({ error: "Failed to load user" });
+    }
   }
-});
+);
 
 export default router;
