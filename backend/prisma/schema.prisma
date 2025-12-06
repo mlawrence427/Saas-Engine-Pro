@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,34 +10,27 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  password        String
-  stripeCustomer  StripeCustomer?
-  subscriptions   StripeSubscription[]
-  createdAt       DateTime         @default(now())
-}
-
-model StripeCustomer {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
-  customerId  String   @unique        // Stripe's ID
-  createdAt   DateTime @default(now())
-}
-
-model StripeSubscription {
-  id             String   @id @default(cuid())
-  stripeId       String   @unique        // Stripe subscription ID
-  userId         String
-  user           User     @relation(fields: [userId], references: [id])
-
-  status         String
-  priceId        String
-  currentPeriodEnd DateTime
-
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
   createdAt DateTime @default(now())
+
+  // ============ Stripe Billing ============
+  stripeCustomerId     String?  @unique
+  stripeSubscriptionId String?
+  stripePriceId        String?
+  subscriptionStatus   String?   // active | trialing | canceled | past_due | etc
+
+  // ============ Roles ============
+  role String @default("user") // user | admin | superadmin
+
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
 }
+
+
+
 
 
 
