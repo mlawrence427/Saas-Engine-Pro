@@ -1,5 +1,12 @@
+// frontend/app/layout.tsx
 import "./globals.css";
+import type { Metadata } from "next";
 import { AuthProvider } from "../context/AuthContext";
+
+export const metadata: Metadata = {
+  title: "SaaS Engine Pro",
+  description: "SaaS Engine Pro boilerplate / engine",
+};
 
 export default function RootLayout({
   children,
@@ -14,3 +21,7 @@ export default function RootLayout({
     </html>
   );
 }
+
+
+
+

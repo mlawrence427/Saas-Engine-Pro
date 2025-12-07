@@ -1,10 +1,16 @@
-import AuthGuard from "@/components/auth/AuthGuard";
+// frontend/app/(dashboard)/layout.tsx
+import type { Metadata } from "next";
 
-export default function DashboardLayout({
+export const metadata: Metadata = {
+  title: "Dashboard - SaaS Engine Pro",
+};
+
+export default function DashboardGroupLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <AuthGuard>{children}</AuthGuard>;
+  return <>{children}</>;
 }
+
 

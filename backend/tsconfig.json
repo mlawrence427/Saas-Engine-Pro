@@ -22,6 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src/**/*", "prisma/seed.ts"],
+  "include": ["src/**/*", "prisma/seed.ts", "../frontend/src/main.tsx", "../frontend/src/App.tsx", "../frontend/src/context", "../frontend/src/components/ProtectedRoute.tsx", "../frontend/src/pages"],
   "exclude": ["node_modules", "dist"]
 }

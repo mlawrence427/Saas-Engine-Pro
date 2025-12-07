@@ -1,99 +1,77 @@
+// frontend/app/auth/register/page.tsx
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function RegisterPage() {
-  const { register, loading } = useAuth();
+  const { register } = useAuth();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const err = await register(email, password, name);
-    if (err) {
-      setError(err);
+    try {
+      await register({ name, email, password });
+      router.push("/dashboard"); // go straight to dashboard
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? err.message ?? "Registration failed");
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white">
-      <div className="w-full max-w-md space-y-6 border border-zinc-800 rounded-xl p-8 bg-zinc-950/70">
-        <div className="space-y-1 text-center">
-          <h1 className="text-2xl font-semibold">Create account</h1>
-          <p className="text-sm text-zinc-400">
-            Start using SaaS Engine Pro.
-          </p>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "black",
+        color: "white",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <form onSubmit={handleSubmit} style={{ textAlign: "center" }}>
+        <div>
+          <input
+            placeholder="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <input
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div>
+          <input
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
+        {error && (
+          <p style={{ color: "red", marginTop: "0.5rem" }}>{error}</p>
+        )}
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading}
-          >
-            {loading ? "Creating account..." : "Create account"}
-          </Button>
-        </form>
-
-        <p className="text-center text-sm text-zinc-400">
-          Already have an account?{" "}
-          <Link
-            href="/auth/login"
-            className="text-blue-400 hover:underline"
-          >
-            Log in
-          </Link>
-        </p>
-      </div>
-    </div>
+        <button type="submit" style={{ marginTop: "1rem" }}>
+          Register
+        </button>
+      </form>
+    </main>
   );
 }
+
+
+
+

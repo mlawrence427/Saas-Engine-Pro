@@ -1,4 +1,4 @@
-// prisma/schema.prisma
+// backend/prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -9,28 +9,89 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  createdAt DateTime @default(now())
+// -----------------------------------------------------
+// Enums
+// -----------------------------------------------------
 
-  // ============ Stripe Billing ============
-  stripeCustomerId     String?  @unique
-  stripeSubscriptionId String?
-  stripePriceId        String?
-  subscriptionStatus   String?   // active | trialing | canceled | past_due | etc
-
-  // ============ Roles ============
-  role String @default("user") // user | admin | superadmin
-
-  @@index([stripeCustomerId])
-  @@index([stripeSubscriptionId])
+enum PlanTier {
+  FREE
+  PRO
+  ENTERPRISE
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
 
+// Optional – helpful if you want to track Stripe state more precisely
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
 
+// -----------------------------------------------------
+// Core models
+// -----------------------------------------------------
 
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  // Hashed password (never store plain text)
+  passwordHash String
 
+  role UserRole @default(USER)
 
+  // Current plan (gated by Stripe)
+  plan PlanTier @default(FREE)
+
+  // Stripe integration
+  stripeCustomerId     String?             @unique
+  stripeSubscriptionId String?
+  subscriptionStatus   SubscriptionStatus?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  moduleAccesses ModuleAccess[]
+}
+
+model Module {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+
+  // Minimum plan required to see/use this module
+  minPlan PlanTier @default(FREE)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Per-user overrides
+  accessOverrides ModuleAccess[]
+}
+
+model ModuleAccess {
+  id String @id @default(cuid())
+
+  userId   String
+  moduleId String
+  canUse   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+}
