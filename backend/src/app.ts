@@ -1,51 +1,48 @@
 // backend/src/app.ts
-
 import express from "express";
-import cookieParser from "cookie-parser";
 import cors from "cors";
-import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 
-dotenv.config();
+// Routers
+import authRouter from "./routes/auth.routes";          // ← adjust name/path if needed
+import adminModulesRouter from "./routes/admin.modules";
+import adminAIModulesRouter from "./routes/admin.ai-modules";
 
-import authRoutes from "./routes/auth.routes";
-import billingRoutes from "./routes/billing.routes";
-import moduleRoutes from "./routes/module.routes";
-import moduleAIRoutes from "./routes/module.ai.routes";
-import moduleRegistryRoutes from "./routes/module.registry.routes";
-import { stripeWebhookHandler, stripeRawBody } from "./routes/stripe.webhooks";
+const app = express();
 
-export function createApp() {
-  const app = express();
+const allowedOrigins =
+  process.env.CORS_ORIGIN?.split(",").map((s) => s.trim()) || [
+    "http://localhost:3000",
+  ];
 
-  app.use(
-    cors({
-      origin: "http://localhost:3000",
-      credentials: true,
-    })
-  );
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 
-  app.use(cookieParser());
+app.use(express.json());
+app.use(cookieParser());
 
-  app.post(
-    "/api/webhooks/stripe",
-    stripeRawBody,
-    stripeWebhookHandler
-  );
+// Health check
+app.get("/health", (_req, res) => {
+  res.json({ ok: true });
+});
 
-  app.use(express.json());
+// Auth routes (login, register, me, etc.)
+app.use("/api/auth", authRouter);
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true });
-  });
+// Admin module registry API
+app.use("/api/admin/modules", adminModulesRouter);
 
-  app.use("/api/auth", authRoutes);
-  app.use("/api/billing", billingRoutes);
-  app.use("/api/modules", moduleRoutes);
-  app.use("/api/modules/ai", moduleAIRoutes);
-  app.use("/api/modules/registry", moduleRegistryRoutes); // ✅ admin registry
+// AI module drafts API
+app.use("/api/admin/ai-modules", adminAIModulesRouter);
 
-  return app;
-}
+export default app;
+
+
+
 
 
 
