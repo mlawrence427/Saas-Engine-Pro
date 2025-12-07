@@ -1,209 +1,155 @@
-// frontend/app/(dashboard)/dashboard/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
-import AuthGuard from "../../../components/auth/AuthGuard";
-import { useAuth } from "../../../context/AuthContext";
+import { useEffect, useState } from "react";
+import AuthGuard from "@/components/auth/AuthGuard";
+import { useAuth } from "@/context/AuthContext";
 
-type ModuleDto = {
+type PlanTier = "FREE" | "PRO" | "ENTERPRISE";
+
+type Module = {
   id: string;
-  slug: string;
   name: string;
-  description: string | null;
-  minPlan: "FREE" | "PRO" | "ENTERPRISE";
+  slug: string;
+  description?: string | null;
+  version: string;
+  minPlan: PlanTier;
   isActive: boolean;
+  isSystem: boolean;
+  requiresReview: boolean;
+};
+
+const PLAN_LABELS: Record<PlanTier, string> = {
+  FREE: "Free",
+  PRO: "Pro",
+  ENTERPRISE: "Enterprise",
 };
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
-  const [modules, setModules] = useState<ModuleDto[]>([]);
-  const [loadingModules, setLoadingModules] = useState(true);
+  const { user } = useAuth();
+  const [modules, setModules] = useState<Module[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    const fetchModules = async () => {
       try {
+        setLoading(true);
         setError(null);
+
         const res = await fetch("http://localhost:3001/api/modules", {
           credentials: "include",
         });
-        if (!res.ok) throw new Error("Failed to load modules");
-        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(`Failed to load modules (${res.status})`);
+        }
+
+        const data = (await res.json()) as Module[];
         setModules(data);
       } catch (err: any) {
         console.error(err);
         setError(err.message ?? "Failed to load modules");
       } finally {
-        setLoadingModules(false);
+        setLoading(false);
       }
-    }
-    load();
+    };
+
+    fetchModules();
   }, []);
-
-  async function handleGenerateModule(e: React.FormEvent) {
-    e.preventDefault();
-    if (!aiPrompt.trim()) return;
-
-    try {
-      setAiBusy(true);
-      setError(null);
-
-      const res = await fetch("http://localhost:3001/api/modules/ai/generate", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: aiPrompt }),
-      });
-
-      if (res.status === 402) {
-        setError("Upgrade to Pro to generate modules with AI.");
-        return;
-      }
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Failed to generate module");
-      }
-
-      // Option A: response returns the new module -> append it
-      const created = await res.json();
-      setModules((prev) => [...prev, created]);
-
-      // Option B (safer): re-fetch full list
-      // const list = await fetch("http://localhost:3001/api/modules", {
-      //   credentials: "include",
-      // });
-      // setModules(await list.json());
-
-      setAiPrompt("");
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message ?? "AI generation failed");
-    } finally {
-      setAiBusy(false);
-    }
-  }
 
   return (
     <AuthGuard>
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "black",
-          color: "white",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "flex-start",
-          paddingTop: "4rem",
-        }}
-      >
-        <h1>Dashboard</h1>
-        <p style={{ marginBottom: "1rem" }}>
-          Welcome, {user?.name ?? user?.email} · Plan: {user?.plan ?? "FREE"}
-        </p>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold">Dashboard</h1>
+            <p className="text-sm text-gray-500">
+              Welcome back{user?.email ? `, ${user.email}` : ""}. Here are the
+              modules available on your plan.
+            </p>
+          </div>
+          {user?.plan && (
+            <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              Current plan: {user.plan}
+            </div>
+          )}
+        </div>
 
-        <button
-          onClick={logout}
-          style={{ marginBottom: "2rem", padding: "0.5rem 1rem" }}
-        >
-          Logout
-        </button>
-
+        {/* Error / loading state */}
         {error && (
-          <p style={{ color: "tomato", marginBottom: "1rem" }}>{error}</p>
+          <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
         )}
 
-        {/* AI module generator */}
-        <form
-          onSubmit={handleGenerateModule}
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            marginBottom: "2rem",
-            maxWidth: 600,
-            width: "100%",
-            justifyContent: "center",
-          }}
-        >
-          <input
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="Describe a module you want to add (Pro feature)…"
-            style={{
-              flex: 1,
-              padding: "0.5rem",
-              borderRadius: 4,
-              border: "1px solid #444",
-              background: "#111",
-              color: "white",
-            }}
-          />
-          <button
-            type="submit"
-            disabled={aiBusy}
-            style={{ padding: "0.5rem 1rem" }}
-          >
-            {aiBusy ? "Generating…" : "Generate with AI"}
-          </button>
-        </form>
+        {loading && !error && (
+          <p className="text-sm text-gray-500">Loading your modules…</p>
+        )}
 
-        {/* Modules list */}
-        <section style={{ maxWidth: 800, width: "100%", padding: "0 1rem" }}>
-          <h2 style={{ marginBottom: "1rem" }}>Your modules</h2>
+        {/* Empty state */}
+        {!loading && modules.length === 0 && !error && (
+          <div className="border rounded-lg p-6 text-sm text-gray-500 bg-white shadow-sm">
+            No modules are currently available on your plan yet.
+          </div>
+        )}
 
-          {loadingModules && <p>Loading modules…</p>}
-
-          {!loadingModules && modules.length === 0 && (
-            <p>No modules yet. Try generating one with AI.</p>
-          )}
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "1rem",
-            }}
-          >
+        {/* Module cards */}
+        {!loading && modules.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {modules.map((m) => (
               <div
                 key={m.id}
-                style={{
-                  border: "1px solid #333",
-                  borderRadius: 8,
-                  padding: "1rem",
-                  background: "#111",
-                }}
+                className="border rounded-xl bg-white shadow-sm p-4 flex flex-col gap-2"
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  <strong>{m.name}</strong>
-                  {!m.isActive && (
-                    <span style={{ color: "tomato", fontSize: "0.8rem" }}>
-                      Inactive
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="font-semibold text-sm">{m.name}</h2>
+                    {m.description && (
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-3">
+                        {m.description}
+                      </p>
+                    )}
+                  </div>
+                  <span className="inline-flex items-center rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600">
+                    {PLAN_LABELS[m.minPlan]}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  {m.isSystem && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-700">
+                      System
                     </span>
                   )}
+                  {!m.isSystem && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-[10px] text-green-700">
+                      App Module
+                    </span>
+                  )}
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-600">
+                    v{m.version || "1.0.0"}
+                  </span>
                 </div>
-                <p style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-                  {m.description ?? "No description"}
-                </p>
-                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>
-                  Min plan: {m.minPlan}
-                </span>
+
+                <div className="mt-3 flex items-center justify-between text-[11px] text-gray-500">
+                  <span className="truncate text-gray-400">{m.slug}</span>
+                  <button
+                    type="button"
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Open
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </section>
-      </main>
+        )}
+      </div>
     </AuthGuard>
   );
 }
+
 
 

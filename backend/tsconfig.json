@@ -1,27 +1,14 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2019",
     "module": "commonjs",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["./*"]
-    }
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "skipLibCheck": true
   },
-  "include": ["src/**/*", "prisma/seed.ts", "../frontend/src/main.tsx", "../frontend/src/App.tsx", "../frontend/src/context", "../frontend/src/components/ProtectedRoute.tsx", "../frontend/src/pages"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src"]
 }

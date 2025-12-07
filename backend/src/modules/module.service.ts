@@ -1,31 +1,67 @@
 // backend/src/modules/module.service.ts
+
+import {
+  PlanTier,
+  Module,
+  ModuleAccess,
+  User,
+  UserRole,
+} from "@prisma/client";
 import prisma from "../lib/prisma";
-import type { User } from "@prisma/client";
 
-import { PlanTier } from "@prisma/client";
-import type { User } from "@prisma/client";
+const PLAN_ORDER: PlanTier[] = [
+  PlanTier.FREE,
+  PlanTier.PRO,
+  PlanTier.ENTERPRISE,
+];
 
-export async function listModulesForUser(user: User) {
-  // Base: modules allowed by plan
-  const modules = await prisma.module.findMany({
-    where: {
-      isActive: true,
-      minPlan: { lte: user.plan }, // works if enum order FREE < PRO < ENTERPRISE
-    },
-    orderBy: { name: "asc" },
+const planRank = (plan: PlanTier) => PLAN_ORDER.indexOf(plan);
+
+export type ModuleVisibleToUser = Module;
+
+// ✅ user MUST have id, plan, role
+export async function listModulesForUser(
+  user: Pick<User, "id" | "plan" | "role">
+): Promise<ModuleVisibleToUser[]> {
+  const [allActiveModules, moduleAccesses] = await Promise.all([
+    prisma.module.findMany({
+      where: { isActive: true },
+    }),
+    prisma.moduleAccess.findMany({
+      where: { userId: user.id },
+    }),
+  ]);
+
+  // Map overrides
+  const accessByModuleId = new Map<string, ModuleAccess>();
+  for (const access of moduleAccesses) {
+    accessByModuleId.set(access.moduleId, access);
+  }
+
+  const userRank = planRank(user.plan);
+  const isAdmin = user.role === UserRole.ADMIN;
+
+  const visibleModules = allActiveModules.filter((module) => {
+    // ✅ 0. Governance: hide unreviewed modules for non-admins
+    if (!isAdmin && module.requiresReview) {
+      return false;
+    }
+
+    // ✅ 1. Per-user override
+    const override = accessByModuleId.get(module.id);
+    if (override) {
+      return true;
+    }
+
+    // ✅ 2. Plan gating
+    const moduleRank = planRank(module.minPlan);
+    if (userRank === -1 || moduleRank === -1) return false;
+
+    return moduleRank <= userRank;
   });
 
-  const accessOverrides = await prisma.moduleAccess.findMany({
-    where: { userId: user.id },
-  });
-
-  const overridesMap = new Map(
-    accessOverrides.map((a) => [a.moduleId, a.canUse])
-  );
-
-  return modules.filter((m) => {
-    const override = overridesMap.get(m.id);
-    if (override === undefined) return true; // no override => use plan rule
-    return override; // true or false
-  });
+  return visibleModules;
 }
+
+
+

@@ -40,19 +40,12 @@ enum SubscriptionStatus {
 // -----------------------------------------------------
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
-  name         String?
-  // Hashed password (never store plain text)
-  passwordHash String
+  id       String   @id @default(cuid())
+  email    String   @unique
+  password String
+  role     UserRole @default(USER)
+  plan     PlanTier @default(FREE)
 
-  role UserRole @default(USER)
-
-  // Current plan (gated by Stripe)
-  plan PlanTier @default(FREE)
-
-  // Stripe integration
-  stripeCustomerId     String?             @unique
   stripeSubscriptionId String?
   subscriptionStatus   SubscriptionStatus?
 
@@ -61,23 +54,41 @@ model User {
 
   // Relations
   moduleAccesses ModuleAccess[]
+
+  // ✅ ADD THIS LINE
+  createdModules Module[] @relation("UserCreatedModules")
 }
 
 model Module {
   id          String  @id @default(cuid())
-  slug        String  @unique
   name        String
+  slug        String  @unique
   description String?
 
-  // Minimum plan required to see/use this module
-  minPlan PlanTier @default(FREE)
+  // Basic versioning
+  version String @default("1.0.0")
 
-  isActive  Boolean  @default(true)
+  // Plan gating
+  minPlan  PlanTier @default(FREE)
+  isActive Boolean  @default(true)
+
+  // Governance flags
+  isSystem       Boolean @default(false) // core engine modules, harder to delete
+  requiresReview Boolean @default(false) // AI-generated / unreviewed modules
+
+  // JSON schema/config for frontends/backends
+  configSchema Json?
+
+  // Optional dependencies (simple string IDs of other modules for now)
+  dependencies String[] @default([])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Per-user overrides
-  accessOverrides ModuleAccess[]
+  createdBy   User?   @relation("UserCreatedModules", fields: [createdById], references: [id])
+  createdById String?
+
+  moduleAccesses ModuleAccess[]
 }
 
 model ModuleAccess {
