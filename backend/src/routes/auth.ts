@@ -1,215 +1,263 @@
-// src/routes/auth.ts
-import { Router, Request, Response } from "express";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma";
+// ============================================================
+// src/routes/auth.ts - SaaS Engine Pro
+// Authentication Routes (Login, Register, Logout)
+// ============================================================
+
+import { Router, Request, Response } from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { prisma } from '../prismaClient';
+import { requireAuth } from '../middleware/requireAuth';
+import { AuditAction, AuditEntityType } from '@prisma/client';
 
 const router = Router();
 
+// ============================================================
+// ENVIRONMENT
+// ============================================================
+
 const JWT_SECRET = process.env.JWT_SECRET!;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || "10", 10);
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not set in environment variables");
-}
+// ============================================================
+// POST /api/auth/login
+// ============================================================
 
-interface JwtPayload {
-  userId: string;
-}
+router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  const { email, password } = req.body;
 
-function generateToken(userId: string) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-}
+  if (!email || !password) {
+    res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'Email and password are required',
+    });
+    return;
+  }
 
-function buildAuthPayload(user: { id: string; name: string | null; email: string }) {
-  return {
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    },
-  };
-}
-
-// -----------------------------
-// REGISTER
-// POST /api/auth/register
-// -----------------------------
-router.post("/register", async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body as {
-      name?: string;
-      email?: string;
-      password?: string;
-    };
-
-    if (!email || !password) {
-      return res.status(400).json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Email and password are required",
-        },
-      });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Password must be at least 8 characters",
-        },
-      });
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { email },
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
     });
 
-    if (existing) {
-      return res.status(409).json({
-        error: {
-          code: "EMAIL_IN_USE",
-          message: "Email already in use",
-        },
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        error: 'InvalidCredentials',
+        message: 'Invalid email or password',
       });
+      return;
     }
 
-    const hashed = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.passwordHash);
+
+    if (!validPassword) {
+      res.status(401).json({
+        success: false,
+        error: 'InvalidCredentials',
+        message: 'Invalid email or password',
+      });
+      return;
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user.id },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    // Set HTTP-only cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          plan: user.plan,
+        },
+        token, // Also return in body for non-cookie auth
+      },
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'LoginFailed',
+      message: 'Login failed',
+    });
+  }
+});
+
+// ============================================================
+// POST /api/auth/logout
+// ============================================================
+
+router.post('/logout', (_req: Request, res: Response): void => {
+  res.clearCookie('token');
+  res.status(200).json({
+    success: true,
+    message: 'Logged out successfully',
+  });
+});
+
+// ============================================================
+// GET /api/auth/me
+// ============================================================
+
+router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        plan: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        error: 'UserNotFound',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { user },
+    });
+
+  } catch (error) {
+    console.error('Get me error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'FetchFailed',
+      message: 'Failed to fetch user',
+    });
+  }
+});
+
+// ============================================================
+// POST /api/auth/register (Optional - for self-service signup)
+// ============================================================
+
+router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'Email and password are required',
+    });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({
+      success: false,
+      error: 'ValidationError',
+      message: 'Password must be at least 8 characters',
+    });
+    return;
+  }
+
+  try {
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+    });
+
+    if (existingUser) {
+      res.status(409).json({
+        success: false,
+        error: 'EmailExists',
+        message: 'An account with this email already exists',
+      });
+      return;
+    }
+
+    // Create user
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        name: name || "",
-        email,
-        password: hashed,
+        email: email.toLowerCase().trim(),
+        passwordHash,
+        role: 'USER',
+        plan: 'FREE',
       },
     });
 
-    const token = generateToken(user.id);
-
-    return res.status(201).json({
-      ...buildAuthPayload(user),
-      token,
-    });
-  } catch (err) {
-    console.error("REGISTER ERROR:", err);
-    return res.status(500).json({
-      error: {
-        code: "SERVER_ERROR",
-        message: "Registration failed",
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        action: AuditAction.USER_CREATED,
+        entityType: AuditEntityType.USER,
+        entityId: user.id,
+        performedByUserId: user.id,
+        metadata: {
+          email: user.email,
+          source: 'self-registration',
+        },
       },
     });
-  }
-});
 
-// -----------------------------
-// LOGIN
-// POST /api/auth/login
-// -----------------------------
-router.post("/login", async (req: Request, res: Response) => {
-  try {
-    const { email, password } = req.body as {
-      email?: string;
-      password?: string;
-    };
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user.id },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
 
-    if (!email || !password) {
-      return res.status(400).json({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Email and password are required",
-        },
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Set cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    if (!user) {
-      return res.status(401).json({
-        error: {
-          code: "INVALID_CREDENTIALS",
-          message: "Invalid credentials",
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          plan: user.plan,
         },
-      });
-    }
-
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({
-        error: {
-          code: "INVALID_CREDENTIALS",
-          message: "Invalid credentials",
-        },
-      });
-    }
-
-    const token = generateToken(user.id);
-
-    return res.json({
-      ...buildAuthPayload(user),
-      token,
-    });
-  } catch (err) {
-    console.error("LOGIN ERROR:", err);
-    return res.status(500).json({
-      error: {
-        code: "SERVER_ERROR",
-        message: "Login failed",
+        token,
       },
     });
-  }
-});
 
-// -----------------------------
-// ME (session check)
-// GET /api/auth/me
-// -----------------------------
-router.get("/me", async (req: Request, res: Response) => {
-  try {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith("Bearer ")) {
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Missing or invalid authorization header",
-        },
-      });
-    }
-
-    const token = auth.replace("Bearer ", "").trim();
-
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!user) {
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Invalid token",
-        },
-      });
-    }
-
-    return res.json(buildAuthPayload(user));
-  } catch (err: any) {
-    console.error("ME CHECK ERROR:", err);
-
-    const isJwtError =
-      err.name === "TokenExpiredError" || err.name === "JsonWebTokenError";
-
-    return res.status(401).json({
-      error: {
-        code: isJwtError ? "INVALID_TOKEN" : "UNAUTHORIZED",
-        message: "Invalid or expired token",
-      },
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'RegistrationFailed',
+      message: 'Registration failed',
     });
   }
 });
 
 export default router;
-
