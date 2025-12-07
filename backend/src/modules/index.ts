@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import express, { Express, Router, Response, NextFunction } from "express";
 import { ModuleManifest, RegisteredModule, AuthenticatedRequest } from "./types";
+import requireAuth from "../middleware/requireAuth"; // ✅ use your real auth
 
 const MODULES_DIR = __dirname; // backend/src/modules
 
@@ -45,17 +46,6 @@ export function loadModules(): RegisteredModule[] {
 
 // -------------- Subscription gating --------------
 
-function requireAuth(
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-}
-
 function subscriptionGate(manifest: ModuleManifest) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     const user = req.user;
@@ -91,8 +81,7 @@ function subscriptionGate(manifest: ModuleManifest) {
 // -------------- Module router mounting --------------
 
 function loadModuleRouter(moduleDir: string): Router {
-  // Convention: each module has routes.ts exporting default Router or createRouter()
-  //   backend/src/modules/<key>/routes.ts
+  // Convention: backend/src/modules/<key>/routes.ts
   const routesPath = path.join(moduleDir, "routes");
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -123,7 +112,7 @@ export function registerModules(app: Express) {
 
   metaRouter.get(
     "/",
-    requireAuth,
+    requireAuth, // ✅ decode JWT, attach req.user
     (req: AuthenticatedRequest, res: Response) => {
       const user = req.user!;
       const plan = user.plan ?? "none";
@@ -157,12 +146,11 @@ export function registerModules(app: Express) {
   // Mount each module's Router under /api/modules/:key
   modules.forEach(({ manifest, moduleDir }) => {
     const router = loadModuleRouter(moduleDir);
-
     const baseMount = `/api/modules/${manifest.key}`;
 
     app.use(
       baseMount,
-      requireAuth,
+      requireAuth, // ✅ ensure req.user is populated
       subscriptionGate(manifest),
       router
     );
@@ -172,3 +160,4 @@ export function registerModules(app: Express) {
     );
   });
 }
+

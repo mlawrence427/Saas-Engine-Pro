@@ -13,6 +13,8 @@ out/
 .env
 .env.local
 .env.production
+backend/.env
+frontend/.env
 
 # Debug logs
 npm-debug.log*

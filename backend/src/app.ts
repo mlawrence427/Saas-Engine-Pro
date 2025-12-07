@@ -1,72 +1,55 @@
 // backend/src/app.ts
-
 import express from "express";
-import cors from "cors";
-import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import cors from "cors";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 import authRoutes from "./routes/auth.routes";
-import userRoutes from "./routes/user.routes";
 import billingRoutes from "./routes/billing.routes";
-import stripeRoutes from "./routes/stripe.routes";
-
-import { authenticateJWT } from "./middleware/auth.middleware";
-import { registerModules } from "./modules";
+import moduleRoutes from "./routes/module.routes";
+import moduleAiRoutes from "./routes/module.ai.routes";
+import { stripeWebhookHandler, stripeRawBody } from "./routes/stripe.webhooks";
 
 const app = express();
 
-// --------------------
-// Core Middleware
-// --------------------
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
-  credentials: true,
-}));
-
-app.use(express.json());
-app.use(cookieParser());
-app.use(morgan("dev"));
-
-// --------------------
-// Public Routes
-// --------------------
-app.use("/api/auth", authRoutes);
-
-// --------------------
-// Protected Routes
-// --------------------
-app.use("/api/user", authenticateJWT, userRoutes);
-app.use("/api/billing", authenticateJWT, billingRoutes);
-app.use("/api/stripe", stripeRoutes); // Stripe webhooks usually must remain public
-
-// --------------------
-// ✅ MODULE SYSTEM (AUTO-REGISTER)
-// --------------------
-registerModules(app);
-
-// --------------------
-// Health Check
-// --------------------
-app.get("/health", (_, res) => {
-  res.json({ status: "ok" });
-});
-
-// --------------------
-// Global Error Handler
-// --------------------
+// --- CORS (adjust origin if needed) ---
 app.use(
-  (
-    err: any,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error("UNHANDLED ERROR:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+  })
 );
 
+// --- Cookies ---
+app.use(cookieParser());
+
+// --- Stripe webhook endpoint: MUST use raw body, BEFORE json() ---
+app.post(
+  "/api/webhooks/stripe",
+  stripeRawBody,          // express.raw({ type: "application/json" })
+  stripeWebhookHandler
+);
+
+// --- Normal JSON body parsing for everything else ---
+app.use(express.json());
+
+// --- Healthcheck ---
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
+// --- Main API routes ---
+app.use("/api/auth", authRoutes);
+app.use("/api/billing", billingRoutes);
+app.use("/api/modules", moduleRoutes);
+app.use("/api/modules/ai", moduleAiRoutes); // /api/modules/ai/generate
+
 export default app;
+
+
+
 
 
 

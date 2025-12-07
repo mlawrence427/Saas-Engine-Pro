@@ -1,37 +1,55 @@
-// src/routes/user.routes.ts
+// backend/src/routes/user.routes.ts
 
-import { Router } from 'express';
-import { authMiddleware } from '../middleware/auth';
-import { prisma } from '../utils/prisma';
+import { Router, Request, Response } from "express";
+import prisma from "../lib/prisma";
 
-export const userRouter = Router();
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    email?: string;
+    plan?: string | null;
+    subscriptionStatus?: string | null;
+  };
+}
 
-// GET /api/user/me
-userRouter.get('/me', authMiddleware, async (req, res) => {
+const router = Router();
+
+/**
+ * GET /api/user/me
+ * Returns the currently authenticated user.
+ * Assumes JWT middleware has already populated req.user.
+ */
+router.get("/me", async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Not authenticated' });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
+    const dbUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
       select: {
         id: true,
         email: true,
         name: true,
-        role: true,
+        plan: true,
+        subscriptionStatus: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
         createdAt: true,
         updatedAt: true,
       },
     });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    if (!dbUser) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    return res.json(user);
-  } catch (error) {
-    console.error('Error in /api/user/me', error);
-    return res.status(500).json({ message: 'Failed to load current user' });
+    return res.json(dbUser);
+  } catch (err) {
+    console.error("[user.me] error", err);
+    return res.status(500).json({ error: "Failed to load user profile" });
   }
 });
+
+export default router;
+

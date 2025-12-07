@@ -1,8 +1,9 @@
+// frontend/components/auth/AuthGuard.tsx
 "use client";
 
 import { useEffect } from "react";
-import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../../context/AuthContext";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -10,18 +11,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/auth/login");
+      router.push("/auth/login");
     }
-  }, [user, loading, router]);
+  }, [loading, user, router]);
 
-  if (loading || !user) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center text-gray-500">
-        Loading...
-      </div>
-    );
+  if (loading) {
+    return null; // could show spinner
+  }
+
+  if (!user) {
+    return null; // redirect in effect
   }
 
   return <>{children}</>;
 }
+
+
 

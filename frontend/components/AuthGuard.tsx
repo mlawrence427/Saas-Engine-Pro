@@ -1,3 +1,4 @@
+// frontend/components/AuthGuard.tsx
 "use client";
 
 import { ReactNode, useEffect } from "react";
@@ -14,10 +15,14 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [loading, user, router]);
 
-  if (loading || (!user && typeof window !== "undefined")) {
+  if (loading) {
     return <div style={{ color: "white" }}>Loading...</div>;
+  }
+
+  // While redirecting, just render nothing
+  if (!user) {
+    return null;
   }
 
   return <>{children}</>;
 }
-
