@@ -1,5 +1,5 @@
 // ============================================================
-// frontend/app/admin/modules/[slug]/history/page.tsx - SaaS Engine Pro
+// frontend/app/admin/modules/[id]/history/page.tsx - SaaS Engine Pro
 // Module Version History
 // ============================================================
 
@@ -14,7 +14,7 @@ import { api, Module, PlanTier } from "@/lib/api";
 // ============================================================
 
 interface PageProps {
-  params: { slug: string };
+  params: { id: string };
 }
 
 interface HistoryData {
@@ -42,10 +42,10 @@ export default function ModuleHistoryPage({ params }: PageProps) {
       setLoading(true);
       setError(null);
 
-      const res = await api.admin.modules.getHistory(params.slug);
+      const res = await api.admin.modules.getHistory(params.id);
 
       if (res.success && res.data) {
-        setData(res.data);
+        setData(res.data as HistoryData);
       } else {
         throw new Error(res.message || "Failed to load history");
       }
@@ -58,13 +58,17 @@ export default function ModuleHistoryPage({ params }: PageProps) {
 
   useEffect(() => {
     fetchHistory();
-  }, [params.slug]);
+  }, [params.id]);
 
   // ----------------------------------------------------------
   // Archive handler
   // ----------------------------------------------------------
   const handleArchive = async (module: Module) => {
-    if (!confirm(`Archive "${module.name}" v${module.version}? This will hide it from users.`)) {
+    if (
+      !confirm(
+        `Archive "${module.name}" v${module.version}? This will hide it from users.`
+      )
+    ) {
       return;
     }
 
@@ -73,7 +77,9 @@ export default function ModuleHistoryPage({ params }: PageProps) {
       await api.admin.modules.archive(module.id);
       await fetchHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to archive module");
+      setError(
+        err instanceof Error ? err.message : "Failed to archive module"
+      );
     } finally {
       setArchiving(null);
     }
@@ -89,7 +95,10 @@ export default function ModuleHistoryPage({ params }: PageProps) {
         <div className="h-8 bg-gray-800 rounded w-64 animate-pulse"></div>
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-[#111111] rounded-xl p-6 animate-pulse border border-gray-800">
+            <div
+              key={i}
+              className="bg-[#111111] rounded-xl p-6 animate-pulse border border-gray-800"
+            >
               <div className="h-5 bg-gray-800 rounded w-1/4 mb-3"></div>
               <div className="h-4 bg-gray-800 rounded w-1/2"></div>
             </div>
@@ -188,19 +197,32 @@ export default function ModuleHistoryPage({ params }: PageProps) {
         <ul className="space-y-2 text-sm text-gray-400">
           <li className="flex items-start gap-2">
             <span className="text-green-400">•</span>
-            <span>Only one version can be <strong className="text-white">active</strong> at a time</span>
+            <span>
+              Only one version can be{" "}
+              <strong className="text-white">active</strong> at a time
+            </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-yellow-400">•</span>
-            <span>When an AI draft updates a module, the previous version is automatically <strong className="text-white">archived</strong></span>
+            <span>
+              When an AI draft updates a module, the previous version is
+              automatically <strong className="text-white">archived</strong>
+            </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-gray-500">•</span>
-            <span>Archived versions are kept for <strong className="text-white">audit trail</strong> purposes</span>
+            <span>
+              Archived versions are kept for{" "}
+              <strong className="text-white">audit trail</strong> purposes
+            </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-blue-400">•</span>
-            <span>Users only see the <strong className="text-white">active version</strong> of each module</span>
+            <span>
+              Users only see the{" "}
+              <strong className="text-white">active version</strong> of each
+              module
+            </span>
           </li>
         </ul>
       </div>
@@ -273,14 +295,10 @@ function VersionCard({
             {/* Meta */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
               {version.publishedAt && (
-                <span>
-                  Published {formatDate(version.publishedAt)}
-                </span>
+                <span>Published {formatDate(version.publishedAt)}</span>
               )}
               {version.publishedByUser && (
-                <span>
-                  by {version.publishedByUser.email}
-                </span>
+                <span>by {version.publishedByUser.email}</span>
               )}
               {version.sourceAIDraft && (
                 <span className="text-purple-400">
@@ -322,7 +340,7 @@ function VersionCard({
 // ============================================================
 
 function PlanBadge({ plan }: { plan: PlanTier }) {
-  const styles = {
+  const styles: Record<PlanTier, string> = {
     FREE: "bg-gray-500/20 text-gray-400",
     PRO: "bg-blue-500/20 text-blue-400",
     ENTERPRISE: "bg-purple-500/20 text-purple-400",

@@ -192,7 +192,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     request<ApiResponse<{ user: User; token: string }>>({
       method: "POST",
-      url: "/api/auth/login",
+      url: "/api/login",
       data: { email, password },
     }),
 

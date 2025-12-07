@@ -5,9 +5,8 @@
 
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../prismaClient';
-import { requireAuth } from '../middleware/requireAuth';
+import { requireAuth } from "../middleware/auth";
 import { AuditAction, AuditEntityType } from '@prisma/client';
 
 const router = Router();
@@ -117,7 +116,7 @@ router.post('/logout', (_req: Request, res: Response): void => {
 // GET /api/auth/me
 // ============================================================
 
-router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/me", requireAuth, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },

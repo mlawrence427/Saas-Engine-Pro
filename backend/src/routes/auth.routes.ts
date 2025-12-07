@@ -42,7 +42,7 @@ function sendAuthResponse(res: Response, user: any) {
 }
 
 /**
- * POST /api/auth/register
+ * POST /api/register
  */
 router.post("/register", async (req: Request, res: Response) => {
   try {
@@ -81,13 +81,13 @@ router.post("/register", async (req: Request, res: Response) => {
 
     return sendAuthResponse(res, user);
   } catch (err) {
-    console.error("Error in POST /api/auth/register:", err);
+    console.error("Error in POST /api/register:", err);
     return res.status(500).json({ message: "Registration failed" });
   }
 });
 
 /**
- * POST /api/auth/login
+ * POST /api/login
  */
 router.post("/login", async (req: Request, res: Response) => {
   try {
@@ -125,7 +125,7 @@ router.post("/login", async (req: Request, res: Response) => {
 
     return sendAuthResponse(res, safeUser);
   } catch (err) {
-    console.error("Error in POST /api/auth/login:", err);
+    console.error("Error in POST /api/login:", err);
     return res.status(500).json({ message: "Login failed" });
   }
 });

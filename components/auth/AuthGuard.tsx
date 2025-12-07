@@ -11,7 +11,7 @@ interface AuthGuardProps {
 /**
  * AuthGuard
  * Wraps any children and ensures the user is authenticated.
- * If not authenticated, redirects to /auth/login.
+ * If not authenticated, redirects to /login.
  */
 export function AuthGuard({ children }: AuthGuardProps) {
   const { user } = useAuth();
@@ -21,7 +21,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   useEffect(() => {
     if (shouldRedirect) {
-      router.replace("/auth/login");
+      router.replace("/login");
     }
   }, [shouldRedirect, router]);
 
