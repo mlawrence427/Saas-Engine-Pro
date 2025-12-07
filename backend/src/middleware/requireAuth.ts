@@ -3,86 +3,54 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
+import { User } from "@prisma/client";
 
-interface JwtPayload {
-  userId: string;
+export interface AuthenticatedRequest extends Request {
+  user?: Pick<User, "id" | "email" | "plan" | "role"> & {
+    [key: string]: any;
+  };
 }
 
-export interface AuthUser {
-  id: string;
-  email?: string;
-  name?: string | null;
-  plan?: string | null;
-  subscriptionStatus?: string | null;
-}
-
-export interface AuthRequest extends Request {
-  user?: AuthUser;
-}
-
-export const requireAuth = async (
-  req: AuthRequest,
+export default async function requireAuth(
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-) => {
+) {
   try {
-    const authHeader = req.headers.authorization || "";
-    const headerToken = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : null;
-
-    const anyReq = req as any;
-    const cookieToken: string | undefined = anyReq.cookies?.token;
-
-    const token = headerToken || cookieToken;
+    const token =
+      req.cookies?.token ||
+      req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-      return res.status(401).json({ error: "Missing auth token" });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      console.error("[requireAuth] JWT_SECRET is not set");
-      return res
-        .status(500)
-        .json({ error: "Auth not configured on the server" });
-    }
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as { userId: string };
 
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-
-    if (!decoded?.userId) {
-      return res.status(401).json({ error: "Invalid token payload" });
-    }
-
-    const dbUser = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
         id: true,
         email: true,
-        name: true,
         plan: true,
-        subscriptionStatus: true,
+        role: true,
       },
     });
 
-    if (!dbUser) {
-      return res.status(401).json({ error: "User not found" });
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    req.user = {
-      id: dbUser.id,
-      email: dbUser.email ?? undefined,
-      name: dbUser.name,
-      plan: dbUser.plan,
-      subscriptionStatus: dbUser.subscriptionStatus,
-    };
-
-    return next();
+    req.user = user;
+    next();
   } catch (err) {
-    console.error("[requireAuth] error", err);
-    return res.status(401).json({ error: "Invalid or expired token" });
+    console.error("requireAuth error:", err);
+    return res.status(401).json({ message: "Unauthorized" });
   }
-};
+}
 
-export default requireAuth;
+
 
