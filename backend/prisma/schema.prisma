@@ -1,21 +1,24 @@
-// backend/prisma/schema.prisma
+// ============================================================
+// prisma/schema.prisma - SaaS Engine Pro
+// ============================================================
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql" // or "mysql" / "sqlite" depending on your setup
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-//
-// Enums
-//
+// ============================================================
+// ENUMS
+// ============================================================
 
 enum Role {
   USER
   ADMIN
+  FOUNDER
 }
 
 enum PlanTier {
@@ -30,99 +33,157 @@ enum AIDraftStatus {
   REJECTED
 }
 
-//
-// Models
-//
+enum AuditAction {
+  // Module lifecycle
+  MODULE_CREATED
+  MODULE_ARCHIVED
+  MODULE_VERSION_CREATED
+  
+  // AI Draft governance
+  MODULE_APPROVED
+  MODULE_REJECTED
+  
+  // User governance
+  PLAN_UPGRADED
+  PLAN_DOWNGRADED
+  ROLE_CHANGED
+  
+  // Future-proofing
+  USER_CREATED
+  USER_DELETED
+  ACCESS_GRANTED
+  ACCESS_REVOKED
+}
+
+enum AuditEntityType {
+  USER
+  MODULE
+  AIDRAFT
+  SUBSCRIPTION
+}
+
+// ============================================================
+// MODELS
+// ============================================================
 
 model User {
-  id                   String           @id @default(cuid())
-  email                String           @unique
-  passwordHash         String
-  role                 Role             @default(USER)
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
 
-  /// Current subscription plan for gating (used by requirePlan + Stripe webhooks)
-  plan                 PlanTier         @default(FREE)
+  role         Role      @default(USER)
+  plan         PlanTier  @default(FREE)
 
-  /// Stripe wiring
-  stripeCustomerId     String?          @unique
-  stripeSubscriptionId String?
+  // Relations
+  moduleAccesses   ModuleAccess[]
+  aiModuleDrafts   AIModuleDraft[]
+  auditLogs        AuditLog[]   @relation("AuditLogPerformedBy")
+  publishedModules Module[]     @relation("ModulePublishedBy")
 
-  /// Relations
-  createdModules       Module[]         @relation("ModulesCreated")
-  moduleOverrides      ModuleOverride[]
-  aiModuleDrafts       AIModuleDraft[]  @relation("DraftsCreated")
-
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Module {
-  id            String    @id @default(cuid())
-  key           String    @unique
-  name          String
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
 
-  description   String?
-  category      String?
-  icon          String?
+  minPlan     PlanTier @default(FREE)
 
-  /// Minimum plan required to see/use this module
-  minPlan       PlanTier  @default(FREE)
+  // Versioning fields
+  version           Int       @default(1)
+  isArchived        Boolean   @default(false)
+  publishedAt       DateTime?
+  publishedByUserId String?
+  publishedByUser   User?     @relation("ModulePublishedBy", fields: [publishedByUserId], references: [id])
 
-  enabled       Boolean   @default(true)
+  // Traceability: which AI draft created this module (null if manual)
+  sourceAIDraftId   String?
+  sourceAIDraft     AIModuleDraft? @relation("ModuleFromDraft", fields: [sourceAIDraftId], references: [id])
 
-  /// JSON blob for module-specific default configuration
-  defaultConfig Json?
+  // Relations
+  moduleAccesses ModuleAccess[]
 
-  /// Creator (admin) – optional
-  createdBy     User?     @relation("ModulesCreated", fields: [createdById], references: [id])
-  createdById   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  overrides     ModuleOverride[]
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  // Constraints & Indexes
+  @@unique([slug, version])
+  @@index([slug])
+  @@index([minPlan])
+  @@index([isArchived])
+  @@index([publishedAt])
 }
 
-model ModuleOverride {
-  id        String  @id @default(cuid())
-
-  user      User    @relation(fields: [userId], references: [id])
+model ModuleAccess {
+  id        String   @id @default(cuid())
   userId    String
-
-  module    Module  @relation(fields: [moduleId], references: [id])
   moduleId  String
 
-  /// If null, follow Module.enabled; if set, override
-  enabled   Boolean?
-
-  /// Per-user config override for this module
-  config    Json?
+  user      User     @relation(fields: [userId], references: [id])
+  module    Module   @relation(fields: [moduleId], references: [id])
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@unique([userId, moduleId])
 }
 
 model AIModuleDraft {
-  id            String        @id @default(cuid())
-  name          String
-  description   String?
-  minPlan       PlanTier      @default(FREE)
-  status        AIDraftStatus @default(PENDING)
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  status      AIDraftStatus  @default(PENDING)
 
-  /// Text diff of proposed Prisma changes (for review UI)
-  schemaDiff    String?
-  /// Text preview of proposed backend routes (for review UI)
-  routesPreview String?
-  /// Simple list of permission strings (e.g. ["requireAuth", "requirePlan(PRO)"])
-  permissions   String[]
+  // AI-generated previews
+  schemaPreview      Json?
+  routesPreview      Json?
+  permissionsPreview Json?
 
-  /// Which admin triggered this draft
-  createdBy     User?         @relation("DraftsCreated", fields: [createdById], references: [id])
-  createdById   String?
+  // Who requested/created this draft
+  createdByUserId String?
+  createdByUser   User?   @relation(fields: [createdByUserId], references: [id])
 
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  // Traceability: modules created from this draft
+  resultingModules Module[] @relation("ModuleFromDraft")
+  
+  // If this draft UPDATES an existing module, track which one
+  targetModuleSlug String?
+
+  // Review metadata
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewNote       String?
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Indexes
+  @@index([status])
+  @@index([createdByUserId])
+  @@index([targetModuleSlug])
 }
+
+model AuditLog {
+  id                String           @id @default(cuid())
+  action            AuditAction
+  entityType        AuditEntityType
+  entityId          String
+
+  performedByUserId String?
+  performedByUser   User?            @relation("AuditLogPerformedBy", fields: [performedByUserId], references: [id])
+
+  metadata          Json?
+
+  createdAt         DateTime         @default(now())
+
+  // Indexes
+  @@index([entityType, entityId])
+  @@index([performedByUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([entityType, action])
+}
+
 
