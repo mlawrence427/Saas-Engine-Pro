@@ -5,13 +5,18 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql" // or "mysql" / "sqlite" depending on your setup
   url      = env("DATABASE_URL")
 }
 
-// -----------------------------------------------------
+//
 // Enums
-// -----------------------------------------------------
+//
+
+enum Role {
+  USER
+  ADMIN
+}
 
 enum PlanTier {
   FREE
@@ -19,90 +24,105 @@ enum PlanTier {
   ENTERPRISE
 }
 
-enum UserRole {
-  USER
-  ADMIN
+enum AIDraftStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
-// Optional – helpful if you want to track Stripe state more precisely
-enum SubscriptionStatus {
-  INCOMPLETE
-  INCOMPLETE_EXPIRED
-  TRIALING
-  ACTIVE
-  PAST_DUE
-  CANCELED
-  UNPAID
-}
-
-// -----------------------------------------------------
-// Core models
-// -----------------------------------------------------
+//
+// Models
+//
 
 model User {
-  id       String   @id @default(cuid())
-  email    String   @unique
-  password String
-  role     UserRole @default(USER)
-  plan     PlanTier @default(FREE)
+  id                   String           @id @default(cuid())
+  email                String           @unique
+  passwordHash         String
+  role                 Role             @default(USER)
 
+  /// Current subscription plan for gating (used by requirePlan + Stripe webhooks)
+  plan                 PlanTier         @default(FREE)
+
+  /// Stripe wiring
+  stripeCustomerId     String?          @unique
   stripeSubscriptionId String?
-  subscriptionStatus   SubscriptionStatus?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// Relations
+  createdModules       Module[]         @relation("ModulesCreated")
+  moduleOverrides      ModuleOverride[]
+  aiModuleDrafts       AIModuleDraft[]  @relation("DraftsCreated")
 
-  // Relations
-  moduleAccesses ModuleAccess[]
-
-  // ✅ ADD THIS LINE
-  createdModules Module[] @relation("UserCreatedModules")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 }
 
 model Module {
-  id          String  @id @default(cuid())
-  name        String
-  slug        String  @unique
-  description String?
+  id            String    @id @default(cuid())
+  key           String    @unique
+  name          String
 
-  // Basic versioning
-  version String @default("1.0.0")
+  description   String?
+  category      String?
+  icon          String?
 
-  // Plan gating
-  minPlan  PlanTier @default(FREE)
-  isActive Boolean  @default(true)
+  /// Minimum plan required to see/use this module
+  minPlan       PlanTier  @default(FREE)
 
-  // Governance flags
-  isSystem       Boolean @default(false) // core engine modules, harder to delete
-  requiresReview Boolean @default(false) // AI-generated / unreviewed modules
+  enabled       Boolean   @default(true)
 
-  // JSON schema/config for frontends/backends
-  configSchema Json?
+  /// JSON blob for module-specific default configuration
+  defaultConfig Json?
 
-  // Optional dependencies (simple string IDs of other modules for now)
-  dependencies String[] @default([])
+  /// Creator (admin) – optional
+  createdBy     User?     @relation("ModulesCreated", fields: [createdById], references: [id])
+  createdById   String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  overrides     ModuleOverride[]
 
-  createdBy   User?   @relation("UserCreatedModules", fields: [createdById], references: [id])
-  createdById String?
-
-  moduleAccesses ModuleAccess[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
-model ModuleAccess {
-  id String @id @default(cuid())
+model ModuleOverride {
+  id        String  @id @default(cuid())
 
-  userId   String
-  moduleId String
-  canUse   Boolean @default(true)
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+
+  module    Module  @relation(fields: [moduleId], references: [id])
+  moduleId  String
+
+  /// If null, follow Module.enabled; if set, override
+  enabled   Boolean?
+
+  /// Per-user config override for this module
+  config    Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, moduleId])
 }
+
+model AIModuleDraft {
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  minPlan       PlanTier      @default(FREE)
+  status        AIDraftStatus @default(PENDING)
+
+  /// Text diff of proposed Prisma changes (for review UI)
+  schemaDiff    String?
+  /// Text preview of proposed backend routes (for review UI)
+  routesPreview String?
+  /// Simple list of permission strings (e.g. ["requireAuth", "requirePlan(PRO)"])
+  permissions   String[]
+
+  /// Which admin triggered this draft
+  createdBy     User?         @relation("DraftsCreated", fields: [createdById], references: [id])
+  createdById   String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+

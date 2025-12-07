@@ -36,20 +36,41 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        // We assume you stored userId in metadata when you created the session
         const userId = session.metadata?.userId;
-        const priceId = session.metadata?.priceId || session.line_items?.data[0]?.price?.id;
+        const customerId = session.customer as string | null;
+        const subscriptionId = session.subscription as string | null;
 
-        if (!userId || !priceId) break;
+        // Fail closed: require userId and customerId
+        if (!userId || !customerId) {
+          console.warn("checkout.session.completed: Missing userId or customerId, failing closed to FREE");
+          if (userId) {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { plan: PlanTier.FREE },
+            });
+          }
+          break;
+        }
 
-        const plan = mapPriceToPlan(priceId);
-        if (!plan) break;
+        // Retrieve subscription from Stripe to get authoritative price
+        let plan: PlanTier = PlanTier.FREE;
+        if (subscriptionId) {
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const priceId = subscription.items.data[0]?.price?.id;
+          plan = mapPriceToPlan(priceId);
+
+          // Check subscription status - only grant paid plan if active
+          if (subscription.status !== "active" && subscription.status !== "trialing") {
+            plan = PlanTier.FREE;
+          }
+        }
 
         await prisma.user.update({
           where: { id: userId },
           data: {
             plan,
-            stripeCustomerId: session.customer as string,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
           },
         });
 
@@ -60,23 +81,39 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       case "customer.subscription.created": {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = sub.customer as string;
+        const subscriptionId = sub.id;
 
-        // Load user by customer id
         const user = await prisma.user.findFirst({
           where: { stripeCustomerId: customerId },
         });
-        if (!user) break;
 
-        const priceId =
-          (sub.items.data[0]?.price?.id as string | undefined) ?? null;
-        if (!priceId) break;
+        if (!user) {
+          console.warn(`subscription event: No user found for customerId ${customerId}`);
+          break;
+        }
 
-        const plan = mapPriceToPlan(priceId);
-        if (!plan) break;
+        const priceId = sub.items.data[0]?.price?.id;
+
+        // Fail closed: unknown or missing price → FREE
+        let plan: PlanTier = mapPriceToPlan(priceId);
+
+        // Check subscription status - downgrade if not active/trialing
+        const activeStatuses: Stripe.Subscription.Status[] = ["active", "trialing"];
+        if (!activeStatuses.includes(sub.status)) {
+          plan = PlanTier.FREE;
+        }
+
+        // Handle cancel_at_period_end - subscription will end, downgrade now for safety
+        if (sub.cancel_at_period_end) {
+          plan = PlanTier.FREE;
+        }
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { plan },
+          data: {
+            plan,
+            stripeSubscriptionId: subscriptionId,
+          },
         });
 
         break;
@@ -85,22 +122,105 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = sub.customer as string;
+
         const user = await prisma.user.findFirst({
           where: { stripeCustomerId: customerId },
         });
-        if (!user) break;
 
-        // downgrade to FREE
+        if (!user) {
+          console.warn(`subscription.deleted: No user found for customerId ${customerId}`);
+          break;
+        }
+
+        // Subscription canceled → always downgrade to FREE
         await prisma.user.update({
           where: { id: user.id },
-          data: { plan: PlanTier.FREE },
+          data: {
+            plan: PlanTier.FREE,
+            stripeSubscriptionId: null,
+          },
+        });
+
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        const subscriptionId = invoice.subscription as string | null;
+
+        if (!customerId) {
+          console.warn("invoice.payment_failed: Missing customerId");
+          break;
+        }
+
+        const user = await prisma.user.findFirst({
+          where: { stripeCustomerId: customerId },
+        });
+
+        if (!user) {
+          console.warn(`invoice.payment_failed: No user found for customerId ${customerId}`);
+          break;
+        }
+
+        // Payment failed → fail closed, downgrade to FREE immediately
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            plan: PlanTier.FREE,
+            stripeSubscriptionId: subscriptionId ?? user.stripeSubscriptionId,
+          },
+        });
+
+        console.warn(`invoice.payment_failed: Downgraded user ${user.id} to FREE`);
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
+        const subscriptionId = invoice.subscription as string | null;
+
+        if (!customerId || !subscriptionId) {
+          console.warn("invoice.payment_succeeded: Missing customerId or subscriptionId");
+          break;
+        }
+
+        const user = await prisma.user.findFirst({
+          where: { stripeCustomerId: customerId },
+        });
+
+        if (!user) {
+          console.warn(`invoice.payment_succeeded: No user found for customerId ${customerId}`);
+          break;
+        }
+
+        // Fetch subscription from Stripe to get authoritative plan
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const priceId = subscription.items.data[0]?.price?.id;
+
+        // Fail closed: unknown price → FREE
+        let plan: PlanTier = mapPriceToPlan(priceId);
+
+        // Only reaffirm paid plan if subscription is actually active
+        if (subscription.status !== "active" && subscription.status !== "trialing") {
+          plan = PlanTier.FREE;
+        }
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            plan,
+            stripeSubscriptionId: subscriptionId,
+          },
         });
 
         break;
       }
 
       default:
-        // ignore other events for now
+        // Unhandled events are logged but do not affect user state
+        console.log(`Unhandled Stripe event type: ${event.type}`);
         break;
     }
 
@@ -112,16 +232,22 @@ export async function stripeWebhookHandler(req: Request, res: Response) {
 }
 
 // Helper: map Stripe price IDs -> PlanTier
-function mapPriceToPlan(priceId: string): PlanTier | null {
+// Fail closed: unknown or undefined price returns FREE
+function mapPriceToPlan(priceId: string | undefined | null): PlanTier {
+  if (!priceId) {
+    console.warn("mapPriceToPlan: Missing priceId, defaulting to FREE");
+    return PlanTier.FREE;
+  }
+
   switch (priceId) {
-    case process.env.STRIPE_PRICE_FREE!:
+    case process.env.STRIPE_PRICE_FREE:
       return PlanTier.FREE;
-    case process.env.STRIPE_PRICE_PRO!:
+    case process.env.STRIPE_PRICE_PRO:
       return PlanTier.PRO;
-    case process.env.STRIPE_PRICE_ENTERPRISE!:
+    case process.env.STRIPE_PRICE_ENTERPRISE:
       return PlanTier.ENTERPRISE;
     default:
-      console.warn("Unknown price id in webhook:", priceId);
-      return null;
+      console.warn(`mapPriceToPlan: Unknown priceId ${priceId}, defaulting to FREE`);
+      return PlanTier.FREE;
   }
 }
