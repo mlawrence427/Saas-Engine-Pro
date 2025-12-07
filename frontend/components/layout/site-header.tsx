@@ -29,7 +29,7 @@ export function SiteHeader() {
         <nav className="flex items-center gap-3 text-xs">
           {!user && (
             <>
-              <Link href="/auth/login" className="hidden sm:inline-block">
+              <Link href="/login" className="hidden sm:inline-block">
                 Log in
               </Link>
               <Link href="/auth/register">

@@ -3,16 +3,19 @@
 // Admin Module Management Routes
 // ============================================================
 
-import { Router, Request, Response } from 'express';
-import { prisma, getModuleHistory } from '../../prismaClient';
-import { requireAuth } from '../../middleware/requireAuth';
-import { requireRole } from '../../middleware/requireRole';
-import { 
-  Role, 
-  PlanTier, 
-  AuditAction, 
+import { Router, Request, Response } from "express";
+import { prisma, getModuleHistory } from "../../prismaClient";
+
+// ⚠️ IMPORTANT: these are default exports, not named
+import requireAuth from "../../middleware/requireAuth";
+import requireRole from "../../middleware/requireRole";
+
+import {
+  Role,
+  PlanTier,
+  AuditAction,
   AuditEntityType,
-} from '@prisma/client';
+} from "@prisma/client";
 
 const router = Router();
 
@@ -22,7 +25,7 @@ const router = Router();
 // ============================================================
 
 router.get(
-  '/',
+  "/",
   requireAuth,
   requireRole(Role.ADMIN, Role.FOUNDER),
   async (req: Request, res: Response): Promise<void> => {
@@ -36,11 +39,11 @@ router.get(
       } = {};
 
       // By default, show only active. Set includeArchived=true to see all
-      if (includeArchived !== 'true') {
+      if (includeArchived !== "true") {
         where.isArchived = false;
       }
 
-      if (slug && typeof slug === 'string') {
+      if (slug && typeof slug === "string") {
         where.slug = slug;
       }
 
@@ -49,11 +52,11 @@ router.get(
       }
 
       const modules = await prisma.module.findMany({
-        where: includeArchived === 'true' ? { isArchived: undefined, ...where } : where,
-        orderBy: [
-          { slug: 'asc' },
-          { version: 'desc' },
-        ],
+        where:
+          includeArchived === "true"
+            ? { isArchived: undefined, ...where }
+            : where,
+        orderBy: [{ slug: "asc" }, { version: "desc" }],
         include: {
           publishedByUser: {
             select: { id: true, email: true },
@@ -68,13 +71,12 @@ router.get(
         success: true,
         data: { modules },
       });
-
     } catch (error) {
-      console.error('Admin list modules error:', error);
+      console.error("Admin list modules error:", error);
       res.status(500).json({
         success: false,
-        error: 'ListFailed',
-        message: 'Failed to list modules',
+        error: "ListFailed",
+        message: "Failed to list modules",
       });
     }
   }
@@ -86,7 +88,7 @@ router.get(
 // ============================================================
 
 router.get(
-  '/:slug/history',
+  "/:slug/history",
   requireAuth,
   requireRole(Role.ADMIN, Role.FOUNDER),
   async (req: Request, res: Response): Promise<void> => {
@@ -98,7 +100,7 @@ router.get(
       if (history.length === 0) {
         res.status(404).json({
           success: false,
-          error: 'ModuleNotFound',
+          error: "ModuleNotFound",
           message: `No module found with slug "${slug}"`,
         });
         return;
@@ -110,16 +112,16 @@ router.get(
           slug,
           versions: history,
           totalVersions: history.length,
-          currentVersion: history.find((m) => !m.isArchived)?.version || null,
+          currentVersion:
+            history.find((m) => !m.isArchived)?.version || null,
         },
       });
-
     } catch (error) {
-      console.error('Get module history error:', error);
+      console.error("Get module history error:", error);
       res.status(500).json({
         success: false,
-        error: 'HistoryFailed',
-        message: 'Failed to get module history',
+        error: "HistoryFailed",
+        message: "Failed to get module history",
       });
     }
   }
@@ -131,19 +133,19 @@ router.get(
 // ============================================================
 
 router.post(
-  '/',
+  "/",
   requireAuth,
   requireRole(Role.ADMIN, Role.FOUNDER),
   async (req: Request, res: Response): Promise<void> => {
-    const { name, slug, description, minPlan = 'FREE' } = req.body;
+    const { name, slug, description, minPlan = "FREE" } = req.body;
     const adminUserId = req.user!.id;
 
     // Validation
     if (!name || !slug) {
       res.status(400).json({
         success: false,
-        error: 'ValidationError',
-        message: 'Name and slug are required',
+        error: "ValidationError",
+        message: "Name and slug are required",
       });
       return;
     }
@@ -151,8 +153,10 @@ router.post(
     if (!Object.values(PlanTier).includes(minPlan as PlanTier)) {
       res.status(400).json({
         success: false,
-        error: 'ValidationError',
-        message: `Invalid minPlan. Must be one of: ${Object.values(PlanTier).join(', ')}`,
+        error: "ValidationError",
+        message: `Invalid minPlan. Must be one of: ${Object.values(
+          PlanTier
+        ).join(", ")}`,
       });
       return;
     }
@@ -166,7 +170,7 @@ router.post(
       if (existing) {
         res.status(409).json({
           success: false,
-          error: 'SlugConflict',
+          error: "SlugConflict",
           message: `A module with slug "${slug}" already exists`,
         });
         return;
@@ -199,7 +203,7 @@ router.post(
               slug: module.slug,
               version: module.version,
               minPlan: module.minPlan,
-              source: 'manual',
+              source: "manual",
             },
           },
         });
@@ -212,13 +216,12 @@ router.post(
         message: `Module "${name}" created successfully`,
         data: { module: result },
       });
-
     } catch (error) {
-      console.error('Create module error:', error);
+      console.error("Create module error:", error);
       res.status(500).json({
         success: false,
-        error: 'CreateFailed',
-        message: 'Failed to create module',
+        error: "CreateFailed",
+        message: "Failed to create module",
       });
     }
   }
@@ -230,7 +233,7 @@ router.post(
 // ============================================================
 
 router.delete(
-  '/:id/archive',
+  "/:id/archive",
   requireAuth,
   requireRole(Role.ADMIN, Role.FOUNDER),
   async (req: Request, res: Response): Promise<void> => {
@@ -245,8 +248,8 @@ router.delete(
       if (!module) {
         res.status(404).json({
           success: false,
-          error: 'ModuleNotFound',
-          message: 'Module not found',
+          error: "ModuleNotFound",
+          message: "Module not found",
         });
         return;
       }
@@ -254,8 +257,8 @@ router.delete(
       if (module.isArchived) {
         res.status(400).json({
           success: false,
-          error: 'AlreadyArchived',
-          message: 'Module is already archived',
+          error: "AlreadyArchived",
+          message: "Module is already archived",
         });
         return;
       }
@@ -276,7 +279,7 @@ router.delete(
             metadata: {
               slug: archived.slug,
               version: archived.version,
-              reason: 'Manual archive by admin',
+              reason: "Manual archive by admin",
             },
           },
         });
@@ -289,13 +292,12 @@ router.delete(
         message: `Module "${result.name}" archived successfully`,
         data: { module: result },
       });
-
     } catch (error) {
-      console.error('Archive module error:', error);
+      console.error("Archive module error:", error);
       res.status(500).json({
         success: false,
-        error: 'ArchiveFailed',
-        message: 'Failed to archive module',
+        error: "ArchiveFailed",
+        message: "Failed to archive module",
       });
     }
   }

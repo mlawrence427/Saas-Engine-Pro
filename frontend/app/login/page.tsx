@@ -1,235 +1,198 @@
-// ============================================================
-// frontend/app/login/page.tsx - SaaS Engine Pro
-// Login Page
-// ============================================================
-
+// frontend/app/login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
 
-// ============================================================
-// LOGIN PAGE
-// ============================================================
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { useToast } from "@/components/ui/use-toast";
+
+type LoginFormState = {
+  email: string;
+  password: string;
+};
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isAuthenticated, loading: authLoading, isAdmin } = useAuth();
+  const { toast } = useToast();
 
-  // Form state
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = React.useState<LoginFormState>({
+    email: "",
+    password: "",
+  });
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // Get redirect URL and error from query params
-  const redirectTo = searchParams.get("redirect") || "/modules";
-  const queryError = searchParams.get("error");
+  const next = searchParams.get("next") || "/dashboard";
 
-  // ----------------------------------------------------------
-  // Redirect if already authenticated
-  // ----------------------------------------------------------
-  useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      // If user is admin and no specific redirect, go to admin
-      if (isAdmin && redirectTo === "/modules") {
-        router.push("/admin");
-      } else {
-        router.push(redirectTo);
-      }
-    }
-  }, [authLoading, isAuthenticated, isAdmin, router, redirectTo]);
+  const handleChange = (field: keyof LoginFormState) => 
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((prev) => ({ ...prev, [field]: event.target.value }));
+    };
 
-  // ----------------------------------------------------------
-  // Handle query error
-  // ----------------------------------------------------------
-  useEffect(() => {
-    if (queryError === "unauthorized") {
-      setError("You must be an admin to access that page");
-    } else if (queryError === "session_expired") {
-      setError("Your session has expired. Please sign in again.");
-    }
-  }, [queryError]);
-
-  // ----------------------------------------------------------
-  // Submit handler
-  // ----------------------------------------------------------
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email.trim() || !password) {
-      setError("Email and password are required");
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.email || !form.password) {
+      toast({
+        variant: "destructive",
+        title: "Missing fields",
+        description: "Please enter both email and password.",
+      });
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
-      setLoading(true);
-      setError(null);
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // Backend should set auth cookies via Set-Cookie.
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+        }),
+      });
 
-      await login({ email: email.trim(), password });
+      if (!response.ok) {
+        let message = "Invalid credentials or login failed.";
+        try {
+          const data = await response.json();
+          if (data?.error || data?.message) {
+            message = data.error || data.message;
+          }
+        } catch {
+          // ignore parse error
+        }
 
-      // Redirect handled by useEffect above
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description: message,
+        });
+        return;
+      }
+
+      // Optimistic UI: assume cookie is set and move to dashboard.
+      toast({
+        title: "Welcome back",
+        description: "You’re now signed in to SaaS Engine Pro.",
+      });
+
+      router.push(next);
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Network error",
+        description:
+          "We couldn’t reach the server. Please check your connection and try again.",
+      });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  // ----------------------------------------------------------
-  // Show loading while checking auth
-  // ----------------------------------------------------------
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
-  // ----------------------------------------------------------
-  // Render
-  // ----------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      {/* Header */}
-      <header className="p-4">
-        <Link href="/" className="flex items-center gap-2 w-fit">
-          <span className="text-2xl">⚡</span>
-          <span className="font-bold text-lg text-white">SaaS Engine</span>
-        </Link>
-      </header>
-
-      {/* Main */}
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-            <p className="text-gray-400">Sign in to your account</p>
-          </div>
-
-          {/* Error Banner */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400 text-sm mb-6">
-              {error}
-            </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Field */}
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-300 mb-2"
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                autoFocus
-                className="w-full px-4 py-3 bg-[#111111] border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-                disabled={loading}
-              />
-            </div>
-
-            {/* Password Field */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-300"
-                >
-                  Password
-                </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm text-blue-400 hover:text-blue-300"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                className="w-full px-4 py-3 bg-[#111111] border border-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-                disabled={loading}
-              />
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading || !email.trim() || !password}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></span>
-                  Signing in...
-                </span>
-              ) : (
-                "Sign in"
-              )}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-800"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-[#0a0a0a] text-gray-500">
-                New to SaaS Engine?
-              </span>
-            </div>
-          </div>
-
-          {/* Register Link */}
-          <Link
-            href="/register"
-            className="block w-full px-4 py-3 bg-gray-800 text-white rounded-xl font-medium text-center hover:bg-gray-700 transition-colors"
-          >
-            Create an account
-          </Link>
-
-          {/* Demo Credentials (dev only) */}
-          {process.env.NODE_ENV === "development" && (
-            <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800">
-              <p className="text-xs text-gray-500 mb-2">Development only:</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail("founder@saasengine.pro");
-                  setPassword("changeme123");
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300"
-              >
-                Fill founder credentials
-              </button>
-            </div>
-          )}
+    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+            SaaS Engine Pro
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Sign in to your control plane
+          </h1>
+          <p className="text-sm text-slate-400">
+            Govern AI-generated modules, plans, and users from a single OS.
+          </p>
         </div>
-      </main>
 
-      {/* Footer */}
-      <footer className="p-4 text-center text-sm text-gray-600">
-        © {new Date().getFullYear()} SaaS Engine Pro
-      </footer>
-    </div>
+        <Card className="border-slate-800 bg-slate-950/60 backdrop-blur">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-lg">Login</CardTitle>
+            <CardDescription>
+              Enter your credentials to access the SaaS Engine Pro console.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="founder@company.com"
+                  value={form.email}
+                  onChange={handleChange("email")}
+                  disabled={isSubmitting}
+                  className="bg-slate-950/80 border-slate-800 focus-visible:ring-sky-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  {/* Hook up forgot-password route later */}
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={handleChange("password")}
+                  disabled={isSubmitting}
+                  className="bg-slate-950/80 border-slate-800 focus-visible:ring-sky-500"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-sky-500 text-slate-950 hover:bg-sky-400"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+          </CardContent>
+
+          <CardFooter className="flex flex-col items-center gap-2 text-sm text-slate-400">
+            <div className="flex items-center gap-1">
+              <span>New to SaaS Engine Pro?</span>
+              <Link
+                href="/register"
+                className="font-medium text-sky-400 hover:text-sky-300"
+              >
+                Create an account
+              </Link>
+            </div>
+            {next && next !== "/dashboard" && (
+              <p className="text-xs text-slate-500">
+                You’ll be redirected to{" "}
+                <span className="font-mono text-slate-300">{next}</span> after
+                login.
+              </p>
+            )}
+          </CardFooter>
+        </Card>
+      </div>
+    </main>
   );
 }

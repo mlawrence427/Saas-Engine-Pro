@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (params: { email: string; password: string }) => {
     setError(null);
     try {
-      const res = await axios.post("/api/auth/login", params);
+      const res = await axios.post("/api/login", params);
       if (res.data.success && res.data.data?.user) {
         setUser(res.data.data.user);
       } else {

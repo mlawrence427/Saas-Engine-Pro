@@ -5,7 +5,7 @@ import { prisma } from '../../prismaClient';
 
 const router = Router();
 
-// POST /api/auth/login
+// POST /api/login
 router.post('/', async (req, res) => {
   try {
     const { email, password } = req.body as {

@@ -11,7 +11,7 @@ export default function LoginPage() {
   async function handleLogin(e: any) {
     e.preventDefault();
 
-    const res = await fetch("http://localhost:3001/api/auth/login", {
+    const res = await fetch("http://localhost:3001/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
