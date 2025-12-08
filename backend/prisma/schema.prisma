@@ -19,12 +19,24 @@ enum Role {
   USER
   ADMIN
   FOUNDER
+  SUBSCRIBER // used in admin.service.ts, etc.
 }
 
 enum PlanTier {
   FREE
   PRO
   ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  incomplete
+  incomplete_expired
+  past_due
+  paused
+  trialing
+  unpaid
 }
 
 enum AIDraftStatus {
@@ -38,17 +50,17 @@ enum AuditAction {
   MODULE_CREATED
   MODULE_ARCHIVED
   MODULE_VERSION_CREATED
-  
+
   // AI Draft governance
   MODULE_APPROVED
   MODULE_REJECTED
-  
+
   // User governance
   PLAN_UPGRADED
   PLAN_DOWNGRADED
   ROLE_CHANGED
-  
-  // Future-proofing
+
+  // Future-proofing / misc
   USER_CREATED
   USER_DELETED
   ACCESS_GRANTED
@@ -70,9 +82,18 @@ model User {
   id           String    @id @default(cuid())
   email        String    @unique
   passwordHash String
+  name         String?   // optional display name
 
   role         Role      @default(USER)
   plan         PlanTier  @default(FREE)
+
+  // Stripe / billing relationships
+  stripeCustomerId    String?           @unique
+  stripeCustomer      StripeCustomer?
+  subscriptions       StripeSubscription[]
+
+  // Auth / security
+  passwordResetTokens PasswordResetToken[]
 
   // Relations
   moduleAccesses   ModuleAccess[]
@@ -84,11 +105,59 @@ model User {
   updatedAt    DateTime  @updatedAt
 }
 
+// Stripe customer record (1:1 with User)
+model StripeCustomer {
+  id         String   @id @default(cuid())
+  customerId String   @unique // actual Stripe customer ID
+
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model StripeSubscription {
+  id                String             @id @default(cuid())
+  stripeId          String             @unique       // used in upsert where: { stripeId }
+  status            SubscriptionStatus
+
+  // matches billing.service.ts -> new Date(subscription.current_period_end * 1000)
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+
+  // used in billingService.getBillingInfo / syncSubscription
+  priceId           String?
+
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+// For password reset flows
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
 model Module {
   id          String   @id @default(cuid())
   name        String
   slug        String
+  key         String   @unique
   description String?
+
+  category    String?
+  icon        String?
+  enabled     Boolean  @default(true)
 
   minPlan     PlanTier @default(FREE)
 
@@ -102,6 +171,9 @@ model Module {
   // Traceability: which AI draft created this module (null if manual)
   sourceAIDraftId   String?
   sourceAIDraft     AIModuleDraft? @relation("ModuleFromDraft", fields: [sourceAIDraftId], references: [id])
+
+  // JSON config (matches TS usage of defaultConfig)
+  defaultConfig     Json?
 
   // Relations
   moduleAccesses ModuleAccess[]
@@ -185,5 +257,6 @@ model AuditLog {
   @@index([createdAt])
   @@index([entityType, action])
 }
+
 
 

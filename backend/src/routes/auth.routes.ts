@@ -1,35 +1,21 @@
-// backend/src/routes/auth.routes.ts
-
 import { Router, Request, Response } from "express";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
-import { PlanTier, UserRole } from "@prisma/client";
-import requireAuth, {
-  AuthenticatedRequest,
-} from "../middleware/requireAuth";
+import { PlanTier, Role } from "@prisma/client";
+import { requireAuth, AuthRequest } from '../middleware/auth.middleware';
+import { hashPassword, comparePassword, signToken } from '../utils/auth';
 
 const router = Router();
 
-/**
- * Generate a signed JWT for a user id
- */
-function generateToken(userId: string) {
-  return jwt.sign({ userId }, process.env.JWT_SECRET as string, {
-    expiresIn: "7d",
-  });
-}
+// Alias for compatibility if needed elsewhere, though using Role directly is better
+type UserRole = Role;
 
-/**
- * Helper to send cookie + user payload
- */
 function sendAuthResponse(res: Response, user: any) {
-  const token = generateToken(user.id);
+  const token = signToken({ userId: user.id });
 
   res.cookie("token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: false, // set true behind HTTPS / in production
+    secure: process.env.NODE_ENV === "production",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -52,9 +38,7 @@ router.post("/register", async (req: Request, res: Response) => {
     };
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password required" });
+      return res.status(400).json({ message: "Email and password required" });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -62,14 +46,14 @@ router.post("/register", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Email already in use" });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashed = await hashPassword(password);
 
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashed,
+        passwordHash: hashed, // Fixed: use passwordHash
         plan: PlanTier.FREE,
-        role: UserRole.USER, // new users default to USER; you can promote to ADMIN manually
+        role: Role.USER,      // Fixed: use Role
       },
       select: {
         id: true,
@@ -97,25 +81,23 @@ router.post("/login", async (req: Request, res: Response) => {
     };
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password required" });
+      return res.status(400).json({ message: "Email and password required" });
     }
 
     const user = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user || !user.password) {
+    // Check against passwordHash
+    if (!user || !user.passwordHash) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await comparePassword(password, user.passwordHash);
     if (!isValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Only expose safe fields to the client
     const safeUser = {
       id: user.id,
       email: user.email,
@@ -130,18 +112,13 @@ router.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/auth/me
- * Used by the frontend AuthContext/AuthGuard to check the current user
- */
 router.get(
   "/me",
   requireAuth,
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-
     return res.json(req.user);
   }
 );

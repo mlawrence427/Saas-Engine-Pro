@@ -1,16 +1,43 @@
-import jwt from "jsonwebtoken";
+import jwt, {
+  SignOptions,
+  VerifyOptions,
+  JwtPayload as JwtPayloadBase,
+  Secret,
+} from 'jsonwebtoken';
+import { env } from '../config/env';
 
-const SECRET = process.env.JWT_SECRET || "dev_secret_key";
-const EXPIRES_IN = "7d";
+export type JwtPayloadInput = Record<string, unknown>;
+export type JwtPayload = JwtPayloadBase | string;
 
-export function signJwt(payload: object) {
-  return jwt.sign(payload, SECRET, { expiresIn: EXPIRES_IN });
+const baseOptions: SignOptions = {
+  algorithm: 'HS256',
+};
+
+const JWT_SECRET: Secret = env.JWT_SECRET;
+
+export function signAccessToken(payload: JwtPayloadInput): string {
+  // Use 'as any' to bypass the overload mismatch for expiresIn with env variables
+  return (jwt as any).sign(payload, JWT_SECRET, {
+    ...baseOptions,
+    expiresIn: env.JWT_EXPIRES_IN,
+  }) as string;
 }
 
-export function verifyJwt<T>(token: string): T | null {
-  try {
-    return jwt.verify(token, SECRET) as T;
-  } catch {
-    return null;
-  }
+export function signRefreshToken(payload: JwtPayloadInput): string {
+  // Use 'as any' here as well
+  return (jwt as any).sign(payload, JWT_SECRET, {
+    ...baseOptions,
+    expiresIn: env.JWT_EXPIRES_IN,
+  }) as string;
 }
+
+export function verifyToken<T = JwtPayload>(
+  token: string,
+  options: VerifyOptions = {}
+): T {
+  return jwt.verify(token, JWT_SECRET, options) as T;
+}
+
+
+
+
