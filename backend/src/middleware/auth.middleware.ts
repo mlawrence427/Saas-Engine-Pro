@@ -1,35 +1,40 @@
-// src/middleware/auth.middleware.ts - PRODUCTION FIXED
+// src/middleware/auth.middleware.ts - PRODUCTION FIXED (DB = source of truth)
 
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role, PlanTier } from '@prisma/client';
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 dotenv.config();
+
 import { prisma } from '../config/database';
 import type { AuthUser } from '../types';
 
-// This is what other files can import
+// ======================================================
+// Types
+// ======================================================
+
+// What other files can import as req type
 export interface AuthRequest extends Request {
   user?: AuthUser;
 }
 
-// JWT payload we expect to sign/verify
+// JWT payload we sign/verify
+// ❗ NOTE: plan is intentionally NOT included – plan comes from DB
 interface JWTPayload {
   userId: string;
   email: string;
   role: Role;
-  plan: PlanTier;
 }
 
-// =====================
+// ======================================================
 // JWT helpers
-// =====================
+// ======================================================
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN as string;
 
 export const generateToken = (
-  payload: Omit<JWTPayload, 'iat' | 'exp'>
+  payload: JWTPayload
 ): string => {
   return (jwt as any).sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
@@ -40,9 +45,9 @@ const verifyToken = (token: string): JWTPayload => {
   return jwt.verify(token, JWT_SECRET) as JWTPayload;
 };
 
-// =====================
+// ======================================================
 // requireAuth
-// =====================
+// ======================================================
 
 export const requireAuth = async (
   req: Request,
@@ -57,18 +62,16 @@ export const requireAuth = async (
     }
 
     const token = header.slice('Bearer '.length);
-    
+
     let payload: JWTPayload;
     try {
       payload = verifyToken(token);
-    } catch (err) {
+    } catch {
       res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
-    // ✅ CRITICAL: Always fetch fresh user data from DB
-    // This ensures role/plan changes take effect immediately
-    // (not waiting for token expiry)
+    // 🔒 Always fetch fresh user state from DB
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
@@ -76,7 +79,7 @@ export const requireAuth = async (
         email: true,
         role: true,
         plan: true,
-        isDeleted: true, // ✅ Check soft delete
+        isDeleted: true,
       },
     });
 
@@ -85,18 +88,17 @@ export const requireAuth = async (
       return;
     }
 
-    // ✅ FIX: Reject deleted users
     if (user.isDeleted) {
       res.status(401).json({ error: 'Account has been deactivated' });
       return;
     }
 
-    // ✅ Use DB values, NOT token values (token may be stale)
+    // ✅ Use DB values, not token claims, as the truth
     (req as AuthRequest).user = {
       id: user.id,
       email: user.email,
-      role: user.role,  // Fresh from DB
-      plan: user.plan,  // Fresh from DB
+      role: user.role,
+      plan: user.plan,
     };
 
     next();
@@ -104,6 +106,10 @@ export const requireAuth = async (
     next(err);
   }
 };
+
+// ======================================================
+// optionalAuth
+// ======================================================
 
 export const optionalAuth = async (
   req: Request,
@@ -131,7 +137,6 @@ export const optionalAuth = async (
         },
       });
 
-      // ✅ Only attach if user exists and not deleted
       if (user && !user.isDeleted) {
         (req as AuthRequest).user = {
           id: user.id,
@@ -141,7 +146,7 @@ export const optionalAuth = async (
         };
       }
     } catch {
-      // invalid token → just continue unauthenticated
+      // Invalid token → treat as unauthenticated
     }
 
     next();
@@ -150,9 +155,9 @@ export const optionalAuth = async (
   }
 };
 
-// =====================
-// role / plan gating
-// =====================
+// ======================================================
+// Role / plan gating
+// ======================================================
 
 const ROLE_HIERARCHY: Record<Role, number> = {
   USER: 1,
@@ -168,16 +173,7 @@ const PLAN_HIERARCHY: Record<PlanTier, number> = {
 };
 
 /**
- * ✅ Require user to have one of the allowed roles
- * 
- * IMPORTANT: This uses HIERARCHY logic:
- * - FOUNDER (4) can access anything
- * - ADMIN (3) can access ADMIN, SUBSCRIBER, USER routes
- * - SUBSCRIBER (2) can access SUBSCRIBER, USER routes
- * - USER (1) can only access USER routes
- * 
- * If you need EXACT role matching (e.g., only SUBSCRIBER, not ADMIN),
- * use requireExactRole() instead.
+ * Require user to have one of the allowed roles (hierarchy-based)
  */
 export const requireRole = (...allowed: Role[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -192,7 +188,7 @@ export const requireRole = (...allowed: Role[]) => {
       const ok = allowed.some((r) => userLevel >= ROLE_HIERARCHY[r]);
 
       if (!ok) {
-        res.status(403).json({ 
+        res.status(403).json({
           error: 'Insufficient role',
           code: 'INSUFFICIENT_ROLE',
         });
@@ -207,12 +203,8 @@ export const requireRole = (...allowed: Role[]) => {
 };
 
 /**
- * ✅ Require user to have EXACTLY one of the specified roles
- * No hierarchy - must be exact match (FOUNDER always bypasses)
- * 
- * Usage:
- *   requireExactRole('SUBSCRIBER') - only SUBSCRIBER (and FOUNDER)
- *   requireExactRole('ADMIN') - only ADMIN (and FOUNDER)
+ * Require user to have EXACTLY one of the specified roles
+ * (FOUNDER always bypasses)
  */
 export const requireExactRole = (...allowed: Role[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -223,14 +215,12 @@ export const requireExactRole = (...allowed: Role[]) => {
         return;
       }
 
-      // FOUNDER always bypasses
       if (user.role === 'FOUNDER') {
         return next();
       }
 
-      // Must have exact role
       if (!allowed.includes(user.role)) {
-        res.status(403).json({ 
+        res.status(403).json({
           error: 'Insufficient role',
           code: 'INSUFFICIENT_ROLE',
         });
@@ -245,7 +235,7 @@ export const requireExactRole = (...allowed: Role[]) => {
 };
 
 /**
- * ✅ Require user to have one of the allowed plans (hierarchy-based)
+ * Require user to have one of the allowed plans (hierarchy-based)
  */
 export const requirePlan = (...allowed: PlanTier[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -265,7 +255,7 @@ export const requirePlan = (...allowed: PlanTier[]) => {
       const ok = allowed.some((p) => userLevel >= PLAN_HIERARCHY[p]);
 
       if (!ok) {
-        res.status(403).json({ 
+        res.status(403).json({
           error: 'Upgrade required',
           code: 'PLAN_UPGRADE_REQUIRED',
           currentPlan: user.plan,
@@ -282,11 +272,7 @@ export const requirePlan = (...allowed: PlanTier[]) => {
 };
 
 /**
- * ✅ Require ADMIN or FOUNDER role (convenience helper)
+ * Convenience helpers
  */
 export const requireAdmin = requireRole('ADMIN');
-
-/**
- * ✅ Require FOUNDER role only
- */
 export const requireFounder = requireExactRole('FOUNDER');
