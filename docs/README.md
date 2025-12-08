@@ -49,3 +49,5 @@ Use it as the **engine** behind whatever business you want to build.
 /backend        # Node + Express + Prisma + Stripe (API + logic)
 /docs           # This documentation suite
 README.md       # High-level project readme
+## Operations
+See /docs/PHASE1-OPS-CHECKLIST.md for the solo-run Phase 1 operations guide.
