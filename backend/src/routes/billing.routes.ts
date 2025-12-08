@@ -1,32 +1,40 @@
-// backend/src/routes/billing.routes.ts
+// src/routes/billing.routes.ts
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from 'express';
+import { requireAuth } from '../middleware/auth.middleware';
+import { billingService } from '../services/billing.service';
 
 const router = Router();
 
 /**
- * Temporary placeholder billing routes.
- * This keeps the server running while we finalize the new billing flow.
- * You can extend these later to call your real Stripe billing service.
+ * POST /api/billing/sync
+ *
+ * Forces a re-sync of the current user's plan from StripeSubscription records.
+ * This is a safety valve for:
+ *  - Webhook delivery issues
+ *  - Support troubleshooting ("Fix my plan" button)
  */
+router.post(
+  '/sync',
+  requireAuth,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = (req as any).user;
+      if (!user?.id) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
 
-// Simple sanity endpoint so you can verify routing
-router.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", scope: "billing" });
-});
+      const plan = await billingService.syncUserPlan(user.id);
 
-// Placeholder for checkout session creation
-router.post("/create-checkout-session", (_req: Request, res: Response) => {
-  return res.status(501).json({
-    error: "create-checkout-session not implemented yet in new billing.routes",
-  });
-});
-
-// Placeholder for billing portal session
-router.post("/create-portal-session", (_req: Request, res: Response) => {
-  return res.status(501).json({
-    error: "create-portal-session not implemented yet in new billing.routes",
-  });
-});
+      return res.json({
+        success: true,
+        plan,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 export default router;
+

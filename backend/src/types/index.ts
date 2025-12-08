@@ -1,26 +1,68 @@
-// src/types/index.ts
-import type { User, Role, PlanTier } from '@prisma/client';
+// src/types/index.ts - Core type definitions
 
+import { Role, PlanTier } from '@prisma/client';
+
+/**
+ * ✅ AuthUser - The user object attached to authenticated requests
+ * 
+ * IMPORTANT: These values come from the DATABASE, not the JWT token.
+ * This ensures role/plan changes take effect immediately.
+ */
 export interface AuthUser {
   id: string;
   email: string;
   role: Role;
   plan: PlanTier;
-  // Optional for future – not in the DB right now
-  name?: string | null;
 }
 
 /**
- * Helper to map a Prisma User into the lightweight AuthUser shape.
+ * JWT payload structure (for reference)
+ * Note: role/plan in token may be stale - always use DB values
  */
-export function toAuthUser(user: User): AuthUser {
-  return {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    plan: user.plan,
-    // name not in schema; leave as undefined
-    name: undefined,
-  };
+export interface JWTPayload {
+  userId: string;
+  email: string;
+  role: Role;
+  plan: PlanTier;
+  iat: number;
+  exp: number;
 }
 
+/**
+ * Standard API error response
+ */
+export interface ApiError {
+  error: string;
+  code?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Standard API success response
+ */
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  message?: string;
+}
+
+/**
+ * Pagination params
+ */
+export interface PaginationParams {
+  page?: number;
+  limit?: number;
+  cursor?: string;
+}
+
+/**
+ * Paginated response
+ */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}

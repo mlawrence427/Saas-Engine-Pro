@@ -192,7 +192,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     request<ApiResponse<{ user: User; token: string }>>({
       method: "POST",
-      url: "/api/login",
+      url: "/api/auth/login",
       data: { email, password },
     }),
 
@@ -213,6 +213,73 @@ export const authApi = {
     request<ApiResponse<{ user: User }>>({
       method: "GET",
       url: "/api/auth/me",
+    }),
+};
+
+// ============================================================
+// ACCOUNT API
+// ============================================================
+
+export const accountApi = {
+  get: () =>
+    request<ApiResponse<{ 
+      id: string; 
+      email: string; 
+      name?: string | null; 
+      role: Role; 
+      plan: PlanTier; 
+      createdAt: string;
+      updatedAt: string;
+    }>>({
+      method: "GET",
+      url: "/api/account",
+    }),
+
+  update: (data: { name?: string }) =>
+    request<ApiResponse<{ 
+      id: string; 
+      email: string; 
+      name?: string | null; 
+      role: Role; 
+      plan: PlanTier; 
+    }>>({
+      method: "PATCH",
+      url: "/api/account",
+      data,
+    }),
+};
+
+// ============================================================
+// BILLING API
+// ============================================================
+
+export interface BillingInfo {
+  plan: PlanTier;
+  status: 'active' | 'past_due' | 'canceled' | 'trialing' | 'free';
+  currentPeriodEnd: string | null;
+  renewsAt: string | null;
+  cancelAtPeriodEnd: boolean;
+  stripeCustomerId: string | null;
+}
+
+export const billingApi = {
+  get: () =>
+    request<ApiResponse<BillingInfo>>({
+      method: "GET",
+      url: "/api/billing",
+    }),
+
+  createPortalSession: () =>
+    request<ApiResponse<{ url: string }>>({
+      method: "POST",
+      url: "/api/billing/portal",
+    }),
+
+  createCheckoutSession: (plan: 'PRO' | 'ENTERPRISE') =>
+    request<ApiResponse<{ url: string }>>({
+      method: "POST",
+      url: "/api/billing/checkout",
+      data: { plan },
     }),
 };
 
@@ -371,6 +438,8 @@ export const adminAuditLogsApi = {
 
 export const api = {
   auth: authApi,
+  account: accountApi,
+  billing: billingApi,
   modules: modulesApi,
   admin: {
     modules: adminModulesApi,

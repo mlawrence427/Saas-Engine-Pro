@@ -1,4 +1,5 @@
-// src/middleware/auth.middleware.ts
+// src/middleware/auth.middleware.ts - PRODUCTION FIXED
+
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role, PlanTier } from '@prisma/client';
@@ -44,18 +45,29 @@ const verifyToken = (token: string): JWTPayload => {
 
 export const requireAuth = async (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
     const header = req.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {
-      throw new Error('Missing bearer token');
+      res.status(401).json({ error: 'Missing bearer token' });
+      return;
     }
 
     const token = header.slice('Bearer '.length);
-    const payload = verifyToken(token);
+    
+    let payload: JWTPayload;
+    try {
+      payload = verifyToken(token);
+    } catch (err) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
 
+    // ✅ CRITICAL: Always fetch fresh user data from DB
+    // This ensures role/plan changes take effect immediately
+    // (not waiting for token expiry)
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: {
@@ -63,12 +75,29 @@ export const requireAuth = async (
         email: true,
         role: true,
         plan: true,
+        isDeleted: true, // ✅ Check soft delete
       },
     });
 
-    if (!user) throw new Error('User not found');
+    if (!user) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
 
-    (req as AuthRequest).user = user as AuthUser;
+    // ✅ FIX: Reject deleted users
+    if (user.isDeleted) {
+      res.status(401).json({ error: 'Account has been deactivated' });
+      return;
+    }
+
+    // ✅ Use DB values, NOT token values (token may be stale)
+    (req as AuthRequest).user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,  // Fresh from DB
+      plan: user.plan,  // Fresh from DB
+    };
+
     next();
   } catch (err) {
     next(err);
@@ -97,11 +126,18 @@ export const optionalAuth = async (
           email: true,
           role: true,
           plan: true,
+          isDeleted: true,
         },
       });
 
-      if (user) {
-        (req as AuthRequest).user = user as AuthUser;
+      // ✅ Only attach if user exists and not deleted
+      if (user && !user.isDeleted) {
+        (req as AuthRequest).user = {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          plan: user.plan,
+        };
       }
     } catch {
       // invalid token → just continue unauthenticated
@@ -130,16 +166,38 @@ const PLAN_HIERARCHY: Record<PlanTier, number> = {
   ENTERPRISE: 3,
 };
 
+/**
+ * ✅ Require user to have one of the allowed roles
+ * 
+ * IMPORTANT: This uses HIERARCHY logic:
+ * - FOUNDER (4) can access anything
+ * - ADMIN (3) can access ADMIN, SUBSCRIBER, USER routes
+ * - SUBSCRIBER (2) can access SUBSCRIBER, USER routes
+ * - USER (1) can only access USER routes
+ * 
+ * If you need EXACT role matching (e.g., only SUBSCRIBER, not ADMIN),
+ * use requireExactRole() instead.
+ */
 export const requireRole = (...allowed: Role[]) => {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     try {
       const user = (req as AuthRequest).user;
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
 
-      const level = ROLE_HIERARCHY[user.role];
-      const ok = allowed.some((r) => level >= ROLE_HIERARCHY[r]);
+      const userLevel = ROLE_HIERARCHY[user.role];
+      const ok = allowed.some((r) => userLevel >= ROLE_HIERARCHY[r]);
 
-      if (!ok) throw new Error('Insufficient role');
+      if (!ok) {
+        res.status(403).json({ 
+          error: 'Insufficient role',
+          code: 'INSUFFICIENT_ROLE',
+        });
+        return;
+      }
+
       next();
     } catch (err) {
       next(err);
@@ -147,19 +205,87 @@ export const requireRole = (...allowed: Role[]) => {
   };
 };
 
-export const requirePlan = (...allowed: PlanTier[]) => {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+/**
+ * ✅ Require user to have EXACTLY one of the specified roles
+ * No hierarchy - must be exact match (FOUNDER always bypasses)
+ * 
+ * Usage:
+ *   requireExactRole('SUBSCRIBER') - only SUBSCRIBER (and FOUNDER)
+ *   requireExactRole('ADMIN') - only ADMIN (and FOUNDER)
+ */
+export const requireExactRole = (...allowed: Role[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     try {
       const user = (req as AuthRequest).user;
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      // FOUNDER always bypasses
+      if (user.role === 'FOUNDER') {
+        return next();
+      }
+
+      // Must have exact role
+      if (!allowed.includes(user.role)) {
+        res.status(403).json({ 
+          error: 'Insufficient role',
+          code: 'INSUFFICIENT_ROLE',
+        });
+        return;
+      }
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+};
+
+/**
+ * ✅ Require user to have one of the allowed plans (hierarchy-based)
+ */
+export const requirePlan = (...allowed: PlanTier[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      const user = (req as AuthRequest).user;
+      if (!user) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      // FOUNDER/ADMIN bypass plan checks
+      if (user.role === 'FOUNDER' || user.role === 'ADMIN') {
+        return next();
+      }
 
       const userLevel = PLAN_HIERARCHY[user.plan] ?? 0;
       const ok = allowed.some((p) => userLevel >= PLAN_HIERARCHY[p]);
 
-      if (!ok) throw new Error('Insufficient plan');
+      if (!ok) {
+        res.status(403).json({ 
+          error: 'Upgrade required',
+          code: 'PLAN_UPGRADE_REQUIRED',
+          currentPlan: user.plan,
+          requiredPlans: allowed,
+        });
+        return;
+      }
+
       next();
     } catch (err) {
       next(err);
     }
   };
 };
+
+/**
+ * ✅ Require ADMIN or FOUNDER role (convenience helper)
+ */
+export const requireAdmin = requireRole('ADMIN');
+
+/**
+ * ✅ Require FOUNDER role only
+ */
+export const requireFounder = requireExactRole('FOUNDER');
