@@ -1,7 +1,7 @@
 // backend/src/api/user/routes.ts
 import { Router, Response } from "express";
 import { prisma } from "../../utils/prisma";
-import { requireAuth, AuthRequest } from "../../middleware/requireAuth";
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 

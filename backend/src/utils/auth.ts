@@ -1,39 +1,31 @@
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
+import { User } from '@prisma/client';
+import { env } from '../config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-const SALT_ROUNDS = 12;
+const JWT_SECRET = env.JWT_SECRET;
+const JWT_EXPIRES_IN = env.JWT_EXPIRES_IN;
 
-export interface JwtPayload {
-  id: string;
-  email: string;
-  role: string;
+export function signToken(payload: object): string {
+  return (jwt as any).sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+  }) as string;
 }
 
-export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-}
+export const hashPassword = async (password: string): Promise<string> => {
+  return await bcrypt.hash(password, 10);
+};
 
-export function verifyToken(token: string): JwtPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
-  } catch {
-    return null;
-  }
-}
+export const comparePassword = async (password: string, userHash: string): Promise<boolean> => {
+  return await bcrypt.compare(password, userHash);
+};
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
+// Backwards compatibility if passing the whole user object
+export const validatePassword = async (password: string, user: User): Promise<boolean> => {
+  if (!user.passwordHash) return false;
+  return await bcrypt.compare(password, user.passwordHash);
+};
 
-export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
+export const generateToken = signToken;
 
-export function extractTokenFromHeader(authHeader?: string): string | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-  return authHeader.slice(7);
-}
+

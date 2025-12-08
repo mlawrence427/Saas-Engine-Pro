@@ -1,4 +1,4 @@
-import { prisma } from '../prismaClient';
+import { prisma } from '../config/database';
 import { AuditAction, AuditEntityType, Prisma } from '@prisma/client';
 
 type AuditMetadata = Prisma.InputJsonValue;

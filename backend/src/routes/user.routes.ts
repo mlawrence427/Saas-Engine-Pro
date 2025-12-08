@@ -1,55 +1,44 @@
-// backend/src/routes/user.routes.ts
-
-import { Router, Request, Response } from "express";
-import prisma from "../lib/prisma";
+// src/routes/user.routes.ts
+import { Router, type Request, type Response } from 'express';
+import { prisma } from '../config/database';
+import { requireAuth } from '../middleware/auth.middleware';
+import type { AuthUser } from '../types';
 
 interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email?: string;
-    plan?: string | null;
-    subscriptionStatus?: string | null;
-  };
+  user?: AuthUser;
 }
 
 const router = Router();
 
-/**
- * GET /api/user/me
- * Returns the currently authenticated user.
- * Assumes JWT middleware has already populated req.user.
- */
-router.get("/me", async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+// GET /api/user/me (or whatever path you mount this on)
+router.get(
+  '/me',
+  requireAuth,
+  async (req: AuthRequest, res: Response) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-  try {
-    const dbUser = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: {
         id: true,
         email: true,
-        name: true,
+        role: true,
         plan: true,
-        subscriptionStatus: true,
-        stripeCustomerId: true,
-        stripeSubscriptionId: true,
-        createdAt: true,
-        updatedAt: true,
+        // no `name` here – not in the Prisma model
       },
     });
 
-    if (!dbUser) {
-      return res.status(404).json({ error: "User not found" });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    return res.json(dbUser);
-  } catch (err) {
-    console.error("[user.me] error", err);
-    return res.status(500).json({ error: "Failed to load user profile" });
+    return res.json(user);
   }
-});
+);
 
 export default router;
+
+
 

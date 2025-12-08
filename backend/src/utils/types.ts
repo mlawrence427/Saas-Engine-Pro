@@ -1,34 +1,21 @@
-import { Request } from 'express';
-import { JwtPayload } from './auth';
+// src/utils/types.ts
 
+import type { Request } from 'express';
+import type { AuthUser } from '../types';
+
+// Express request with an authenticated user attached
 export interface AuthenticatedRequest extends Request {
-  user?: JwtPayload;
+  user: AuthUser;
 }
 
+// Generic API response shape (optional helper)
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
-  message?: string;
-  error?: boolean;
-  code?: string;
-  details?: object;
-}
-
-export function successResponse<T>(data: T, message?: string): ApiResponse<T> {
-  return {
-    success: true,
-    error: false,
-    data,
-    message,
-  };
-}
-
-export function errorResponse(message: string, code?: string, details?: object): ApiResponse {
-  return {
-    success: false,
-    error: true,
-    message,
-    code,
-    details,
+  error?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+    timestamp?: string;
   };
 }

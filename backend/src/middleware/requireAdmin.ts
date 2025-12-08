@@ -1,26 +1,10 @@
-// backend/src/middleware/requireAdmin.ts
+// src/middleware/requireAdmin.ts
+import { RequestHandler } from 'express';
+import { Role } from '@prisma/client';
+import { requireRole } from './auth.middleware';
 
-import { Request, Response, NextFunction } from "express";
-import { UserRole } from "@prisma/client";
-
-interface AdminRequest extends Request {
-  user?: {
-    role?: UserRole;
-    [key: string]: any;
-  };
-}
-
-export default function requireAdmin(
-  req: AdminRequest,
-  res: Response,
-  next: NextFunction
-) {
-  const user = req.user;
-
-  if (!user || user.role !== UserRole.ADMIN) {
-    return res.status(403).json({ message: "Admin access required" });
-  }
-
-  return next();
-}
-
+/**
+ * Middleware that requires ADMIN or FOUNDER role.
+ * Thin wrapper around requireRole for legacy imports.
+ */
+export const requireAdmin: RequestHandler = requireRole(Role.ADMIN, Role.FOUNDER);

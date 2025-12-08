@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../../prismaClient';
+import { prisma } from '../config/database';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { AuditAction, AuditEntityType } from '@prisma/client';
 

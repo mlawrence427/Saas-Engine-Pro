@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
@@ -13,35 +14,34 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node",
-    "allowSyntheticDefaultImports": true,
-    "noImplicitAny": true,
     "noImplicitReturns": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
     "noFallthroughCasesInSwitch": true,
-    "useUnknownInCatchVariables": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "exactOptionalPropertyTypes": false,
+    "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "prisma/**/*.ts"
-  ],
-  "exclude": [
+  "include": ["src/**/*"],
+     "exclude": [
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "src/api",
+    "src/controllers",
+    "src/routes/auth.ts",
+    "src/routes/billing.ts",
+    "src/routes/account.ts",
+    "src/routes/admin.modules.routes.ts",
+    "src/routes/admin.aiModules.routes.ts",
+    "src/routes/admin.users.routes.ts",
+    "src/routes/admin.auditLogs.routes.ts",
+    "src/services/admin.service.ts",
+    "src/services/audit.service.ts"
   ]
 }

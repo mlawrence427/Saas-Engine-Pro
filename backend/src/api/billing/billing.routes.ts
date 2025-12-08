@@ -3,7 +3,7 @@
 import { Router, Response } from "express";
 import Stripe from "stripe";
 import { prisma } from "../../utils/prisma";
-import { requireAuth, AuthRequest } from "../../middleware/requireAuth";
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 
