@@ -3,7 +3,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { Role, PlanTier } from '@prisma/client';
-import { env } from '../config/env';
+import dotenv from "dotenv";
+dotenv.config();
 import { prisma } from '../config/database';
 import type { AuthUser } from '../types';
 
@@ -24,8 +25,8 @@ interface JWTPayload {
 // JWT helpers
 // =====================
 
-const JWT_SECRET = env.JWT_SECRET;
-const JWT_EXPIRES_IN = env.JWT_EXPIRES_IN;
+const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN as string;
 
 export const generateToken = (
   payload: Omit<JWTPayload, 'iat' | 'exp'>
