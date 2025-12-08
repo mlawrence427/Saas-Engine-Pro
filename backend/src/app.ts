@@ -6,11 +6,14 @@ import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.routes';
 import userRouter from './routes/user.routes';
 import modulesRouter from './routes/modules';
-import { stripeWebhookHandler } from './routes/stripe.webhooks';
+import stripeWebhookRouter from './routes/stripe.webhooks';
 
 const app = express();
 
-// JSON + cookies
+// ✅ IMPORTANT: Stripe must be mounted BEFORE express.json()
+app.use('/api/webhooks', stripeWebhookRouter);
+
+// ✅ Normal middleware AFTER
 app.use(cookieParser());
 app.use(express.json());
 app.use(
@@ -20,26 +23,16 @@ app.use(
   })
 );
 
-// Health check
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Auth & user
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
-
-// Modules registry (read-only public for now)
 app.use('/api/modules', modulesRouter);
 
-// Stripe webhook (raw body)
-app.post(
-  '/api/webhooks/stripe',
-  express.raw({ type: 'application/json' }),
-  stripeWebhookHandler
-);
-
 export default app;
+
 
 
 
