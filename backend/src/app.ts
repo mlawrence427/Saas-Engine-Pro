@@ -7,13 +7,14 @@ import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.routes';
 import userRouter from './routes/user.routes';
 import modulesRouter from './routes/modules';
+import billingRouter from './routes/billing.routes';
 import stripeWebhookRouter from './routes/stripe.webhooks';
 
 const app = express();
 
 /**
- * ✅ Stripe Webhooks MUST be mounted BEFORE express.json()
- * This preserves the raw body for signature verification.
+ * ✅ CRITICAL: Stripe webhooks MUST be mounted BEFORE express.json()
+ * This preserves the raw request body for signature verification.
  */
 app.use('/api/webhooks', stripeWebhookRouter);
 
@@ -30,7 +31,7 @@ app.use(
 );
 
 /**
- * ✅ Health check
+ * ✅ Health Check
  */
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
@@ -42,8 +43,11 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
 app.use('/api/modules', modulesRouter);
+app.use('/api/billing', billingRouter); // ✅ THIS IS REQUIRED
 
 export default app;
+
+
 
 
 
