@@ -1,5 +1,4 @@
 // src/app.ts
-
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -7,20 +6,20 @@ import cookieParser from 'cookie-parser';
 import authRouter from './routes/auth.routes';
 import userRouter from './routes/user.routes';
 import modulesRouter from './routes/modules';
-import billingRouter from './routes/billing.routes';
 import stripeWebhookRouter from './routes/stripe.webhooks';
+import billingRouter from './routes/billing.routes';
+import protectedRouter from './routes/protected.routes';
 
 const app = express();
 
 /**
- * ✅ CRITICAL: Stripe webhooks MUST be mounted BEFORE express.json()
- * This preserves the raw request body for signature verification.
+ * ✅ IMPORTANT:
+ * Stripe webhooks must be mounted BEFORE express.json()
+ * so that the raw request body is available for signature verification.
  */
 app.use('/api/webhooks', stripeWebhookRouter);
 
-/**
- * ✅ Normal middleware AFTER webhooks
- */
+// ✅ Normal middleware AFTER webhooks
 app.use(cookieParser());
 app.use(express.json());
 app.use(
@@ -30,22 +29,26 @@ app.use(
   })
 );
 
-/**
- * ✅ Health Check
- */
+// Health check
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-/**
- * ✅ Core API Routes
- */
+// Auth & user
 app.use('/api/auth', authRouter);
 app.use('/api/user', userRouter);
+
+// Modules registry (read-only public for now)
 app.use('/api/modules', modulesRouter);
-app.use('/api/billing', billingRouter); // ✅ THIS IS REQUIRED
+
+// Billing + subscription control (checkout, portal, sync, me)
+app.use('/api/billing', billingRouter);
+
+// Demo protected routes (plan-gated endpoints)
+app.use('/api/protected', protectedRouter);
 
 export default app;
+
 
 
 
