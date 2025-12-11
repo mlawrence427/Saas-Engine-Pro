@@ -1,49 +1,46 @@
-// /marketing-site/components/Shell.tsx
+// marketing-site/components/Shell.tsx
 import React from 'react';
 import Link from 'next/link';
-import BoundariesBlock from './BoundariesBlock';
 
-export default function Shell({
-  children,
-}: {
+type ShellProps = {
   children: React.ReactNode;
-}) {
+};
+
+export default function Shell({ children }: ShellProps) {
   return (
-    <div className="ss-shell">
-      <header className="ss-header">
-        <div className="ss-header-inner">
-          <Link href="/" className="ss-logo">
-            SimpleStates
-          </Link>
-
-          <nav className="ss-nav" aria-label="Primary">
-            <Link href="/saas-engine" className="ss-nav-link">
-              SaaS Engine
-            </Link>
-            <Link href="/accessoff" className="ss-nav-link">
-              AccessOff
-            </Link>
-            <Link href="/actiontimer" className="ss-nav-link">
-              ActionTimer
-            </Link>
+    <div className="min-h-screen bg-[#fdfdfd] text-[12px] leading-snug">
+      <div className="max-w-4xl mx-auto border-x border-black">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-black px-4 py-2">
+          <div className="text-[10px] tracking-[0.2em] uppercase">
+            <Link href="/">SIMPLESTATES</Link>
+          </div>
+          <nav className="flex gap-4 text-[10px]">
+            <Link href="/saas-engine">SaaS Engine</Link>
+            <Link href="/accessoff">AccessOff</Link>
+            <Link href="/actiontimer">ActionTimer</Link>
           </nav>
-        </div>
-      </header>
+        </header>
 
-      <main className="ss-main">{children}</main>
+        {/* Main content */}
+        <main className="px-4 py-6">
+          {children}
+        </main>
 
-      <section
-        className="ss-boundaries-wrapper"
-        aria-label="Boundary conditions"
-      >
-        <BoundariesBlock />
-      </section>
-
-      <footer className="ss-footer">
-        <div className="ss-footer-inner">
-          <span>Deterministic. Mechanical. Self-hosted.</span>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-black px-4 py-2 text-[10px] flex items-center justify-between">
+          <span>© SimpleStates 2025</span>
+          <span>
+            contact:{' '}
+            <a
+              href="mailto:founder@simple-states.com"
+              className="underline"
+            >
+              founder@simple-states.com
+            </a>
+          </span>
+        </footer>
+      </div>
     </div>
   );
 }

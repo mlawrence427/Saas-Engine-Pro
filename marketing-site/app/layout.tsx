@@ -1,11 +1,11 @@
-// /marketing-site/app/layout.tsx
+// marketing-site/app/layout.tsx
 import React from 'react';
-import '../styles/globals.css';
+import './styles/globals.css';
 import Shell from '../components/Shell';
 
 export const metadata = {
   title: 'SimpleStates',
-  description: 'Deterministic, mechanical infrastructure tools.',
+  description: 'Deterministic, self-hosted, mechanical infrastructure tools.',
 };
 
 export default function RootLayout({
@@ -21,3 +21,4 @@ export default function RootLayout({
     </html>
   );
 }
+
