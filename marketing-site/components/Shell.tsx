@@ -1,65 +1,49 @@
+// /marketing-site/components/Shell.tsx
+import React from 'react';
 import Link from 'next/link';
 import BoundariesBlock from './BoundariesBlock';
 
-export default function Shell({ children }: { children: React.ReactNode }) {
+export default function Shell({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
+    <div className="ss-shell">
+      <header className="ss-header">
+        <div className="ss-header-inner">
+          <Link href="/" className="ss-logo">
+            SimpleStates
+          </Link>
 
-      {/* Header */}
-      <header className="mb-10 border-b border-black pb-4">
-        <h1 className="font-mono text-2xl tracking-tight">
-          <Link href="/">SimpleStates</Link>
-        </h1>
-
-        <nav className="mt-2 space-x-4 text-sm font-mono underline">
-          <Link href="/saas-engine">SaaS Engine</Link>
-          <Link href="/accessoff">AccessOff SDK</Link>
-          <Link href="/actiontimer">ActionTimer</Link>
-        </nav>
+          <nav className="ss-nav" aria-label="Primary">
+            <Link href="/saas-engine" className="ss-nav-link">
+              SaaS Engine
+            </Link>
+            <Link href="/accessoff" className="ss-nav-link">
+              AccessOff
+            </Link>
+            <Link href="/actiontimer" className="ss-nav-link">
+              ActionTimer
+            </Link>
+          </nav>
+        </div>
       </header>
 
-      {/* Main */}
-      <main>{children}</main>
+      <main className="ss-main">{children}</main>
 
-      {/* Boundaries */}
-      <footer className="mt-16 pt-8 border-t border-black text-xs font-mono">
+      <section
+        className="ss-boundaries-wrapper"
+        aria-label="Boundary conditions"
+      >
         <BoundariesBlock />
+      </section>
 
-        <div className="mt-6">
-          <p className="uppercase tracking-tight">Links</p>
-          <ul className="list-disc list-inside mt-2 space-y-2">
-            <li>
-              <a
-                href="https://lemonsqueezy.com/simplestates"
-                className="underline"
-                target="_blank"
-              >
-                Lemon Squeezy Store
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://www.youtube.com/@simplestates"
-                className="underline"
-                target="_blank"
-              >
-                YouTube
-              </a>
-            </li>
-            <li>
-              <a
-                href="https://x.com/simplestates"
-                className="underline"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                X (Twitter)
-              </a>
-            </li>
-          </ul>
+      <footer className="ss-footer">
+        <div className="ss-footer-inner">
+          <span>Deterministic. Mechanical. Self-hosted.</span>
         </div>
       </footer>
-
     </div>
   );
 }

@@ -1,19 +1,19 @@
 // app/actiontimer/page.tsx
-import { BoundariesBlock } from '../../components/BoundariesBlock';
 
 export default function ActionTimerPage() {
   return (
-    <div className="space-y-8 text-xs">
+    <div className="space-y-8">
       <section className="border border-black p-4">
         <h1 className="text-lg mb-1 tracking-tight">ActionTimer</h1>
-        <p className="mb-2">
-          A self-hosted time-expiry state engine. It stores expiry intents and
-          exposes expiry state. It does not schedule or execute any actions.
+        <p className="text-xs mb-2">
+          Time-expiry primitive, self-hosted.
         </p>
-        <p className="mb-2">
-          ActionTimer emits expiry-related signals only. You decide what to do
-          when an intent should be treated as expired according to the data you
-          have stored and the time source you trust.
+        <p className="text-xs mb-2">
+          ActionTimer is a self-hosted state primitive that stores expiry
+          intents and exposes expiry state for your own systems. It does not
+          schedule jobs, run workflows, or enforce delays on your behalf. It
+          only records targets and emits simple state that your application may
+          poll.
         </p>
         <p className="text-[10px]">
           This page is an operational specification of emitted state. It is not
@@ -21,111 +21,110 @@ export default function ActionTimerPage() {
         </p>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
-          Expiry Intents &amp; Signals
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
+          Signals &amp; Model
         </h2>
-        <p>ActionTimer tracks expiry intents such as:</p>
+        <p>
+          ActionTimer stores records representing “something that should change
+          at or after a given time.” Your systems may query these records to
+          decide whether to allow, delay, or change behavior. Example questions:
+        </p>
         <ul className="list-disc list-inside">
-          <li>Trial periods</li>
-          <li>Cool-down windows</li>
-          <li>Delayed activations</li>
-          <li>Scheduled deactivations</li>
+          <li>Has this cooldown period finished yet?</li>
+          <li>Is this trial or access window considered expired?</li>
+          <li>
+            Are there outstanding expiry intents that my own job runner should
+            process?
+          </li>
         </ul>
-        <p>Typical derived states include:</p>
+        <p className="mt-1">Example emitted states include:</p>
         <ul className="list-disc list-inside">
           <li>
-            <code>
-              INTENT_STATE: PENDING | EXPIRED | CANCELED | ACKNOWLEDGED
-            </code>
+            <code>EXPIRY_STATE: PENDING | READY | PAST</code>
           </li>
           <li>
-            Whether, according to the stored timestamp and your current time
-            source, an intent should be treated as past expiry.
+            <code>WINDOW_STATE: ACTIVE | CLOSED</code>
+          </li>
+          <li>
+            <code>CHECK_REQUIRED: YES | NO</code>
           </li>
         </ul>
         <p>
-          ActionTimer does not run timers or background jobs. Your system
-          queries it when needed and interprets the returned state in your own
-          logic.
+          ActionTimer does not execute actions. It exposes stored time-based
+          state that your own scheduler or request handlers may consult.
         </p>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
           Inputs &amp; Integration
         </h2>
-        <p>You are responsible for:</p>
+        <p>Typical inputs you are responsible for wiring:</p>
         <ul className="list-disc list-inside">
-          <li>Creating expiry intents for your own subject identifiers</li>
-          <li>Choosing the timestamps used for expiry decisions</li>
-          <li>Driving any follow-up actions when an intent is treated as expired</li>
+          <li>Creation of expiry intents with a target time</li>
+          <li>Association between expiry records and accounts/resources</li>
+          <li>
+            Background or on-demand checks that read ActionTimer state and act
+            on it in your own system
+          </li>
         </ul>
         <p>
-          ActionTimer&apos;s behavior depends entirely on the timestamps,
-          subject identifiers, and correlation keys you provide, and on the
-          environment in which you run it.
+          ActionTimer is not a job runner. It does not guarantee that anything
+          happens at or after a time. It exposes data that your code must read
+          and act upon.
         </p>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
           Delivery Format
         </h2>
         <p>
-          ActionTimer is delivered as a self-hosted backend codebase (database
-          schema and service logic) via Lemon Squeezy. You run it where you run
-          your other infrastructure.
+          ActionTimer is delivered as a self-hosted codebase (database schema,
+          server code, and supporting components) via Lemon Squeezy after
+          purchase. You operate it in your own environment.
         </p>
         <p>
-          There is no managed scheduler, no hosted cron service, and no external
-          execution environment.
+          There is no hosted service, no remote scheduler, and no guarantee of
+          execution timing from SimpleStates.
         </p>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
           Does Not Do
         </h2>
         <ul className="list-disc list-inside">
-          <li>Does not run cron jobs or timers</li>
-          <li>Does not send emails, webhooks, or notifications</li>
-          <li>Does not guarantee delivery or ordering of any actions</li>
-          <li>Does not adjust system clocks or compensate for clock drift</li>
-          <li>Does not observe or monitor external systems</li>
+          <li>Does not run background jobs or task queues</li>
+          <li>Does not guarantee that actions fire at a specific time</li>
+          <li>Does not implement retries, backoff, or workflows</li>
+          <li>Does not send emails, notifications, or alerts</li>
         </ul>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
           Limitations &amp; Failure Modes
         </h2>
         <p>
-          Expiry-related signals are derived from stored timestamps and your
-          current time source. They are approximate and may be early, late,
-          duplicated, or never observed depending on how and when you query the
-          system.
+          Stored expiry data may become stale or incorrect if your inputs are
+          misconfigured or not updated. ActionTimer does not validate whether
+          expiry times are reasonable or safe.
         </p>
         <p>
-          ActionTimer does not push events or guarantee that any consumer will
-          see a given expiry. If your system does not query or process the
-          state, no action will occur, regardless of what ActionTimer stores.
-        </p>
-        <p>
-          All timing guarantees, precision requirements, retries, and failure
-          handling for expiry workflows belong to your application and
-          infrastructure.
+          Queries may fail, return partial data, or lag in reflecting recent
+          writes if your database or environment is unhealthy. There are no
+          timing or delivery guarantees.
         </p>
       </section>
 
-      <section className="border border-black p-4 space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-1">
-          Purchase
-        </h2>
+      <section className="border border-black p-4 text-xs space-y-2">
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">Purchase</h2>
         <p className="mb-1">
           ActionTimer is licensed as a one-time purchase via Lemon Squeezy.
-          Standard and Commercial licenses differ only in legal usage scope, not
-          in code.
+          License tiers differ only in legal usage scope, not in code or
+          capabilities.
         </p>
         <p>
           Store link:{' '}
@@ -138,9 +137,11 @@ export default function ActionTimerPage() {
             https://lemonsqueezy.com/simplestates
           </a>
         </p>
+        <p className="text-[10px]">
+          Select the ActionTimer license tier that matches your intended use
+          (single internal system vs. multiple internal systems/client work).
+        </p>
       </section>
-
-      <BoundariesBlock />
     </div>
   );
 }
