@@ -1,6 +1,6 @@
 // marketing-site/app/layout.tsx
 import React from 'react';
-import './styles/globals.css';
+import '../styles/globals.css';
 import Shell from '../components/Shell';
 
 export const metadata = {
