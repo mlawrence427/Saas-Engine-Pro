@@ -1,26 +1,6 @@
-/* /marketing-site/styles/globals.css */
+/* marketing-site/styles/globals.css */
 
-/* If you're using Tailwind, keep these at the very top */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* --------------------------------------------------
-   SimpleStates Brutalist Layout Tokens
--------------------------------------------------- */
-
-:root {
-  --ss-space-1: 8px;
-  --ss-space-2: 16px;
-  --ss-space-3: 24px;
-  --ss-space-4: 32px;
-  --ss-space-5: 48px;
-}
-
-/* --------------------------------------------------
-   Base
--------------------------------------------------- */
-
+/* Reset-ish */
 *,
 *::before,
 *::after {
@@ -33,171 +13,126 @@ body {
   padding: 0;
 }
 
+/* Base typography */
 body {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
-  background-color: #f3f3f3;
-  color: #111111;
+  background: #fdfdfd;
+  color: #000;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-/* --------------------------------------------------
-   Shell Container
--------------------------------------------------- */
-
+/* Layout shell */
 .ss-shell {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  max-width: 960px;
   margin: 0 auto;
-  max-width: 1040px;
   border-left: 1px solid #000;
   border-right: 1px solid #000;
-  border-top: 1px solid #000;
-  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
 }
 
-/* --------------------------------------------------
-   Header + Nav
--------------------------------------------------- */
-
+/* Header */
 .ss-header {
   border-bottom: 1px solid #000;
+  padding: 8px 16px;
 }
 
-.ss-header-inner {
+.ss-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--ss-space-2);
 }
 
 .ss-logo {
-  font-weight: 600;
-  letter-spacing: 0.18em;
   text-transform: uppercase;
-  font-size: 11px;
+  letter-spacing: 0.2em;
   text-decoration: none;
+  color: inherit;
 }
 
-.ss-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--ss-space-2);
-  padding-left: var(--ss-space-2);
-  margin-left: var(--ss-space-2);
-  border-left: 1px solid #000;
-  font-size: 11px;
-}
-
-.ss-nav-link {
+/* Nav */
+.ss-nav a {
+  margin-left: 16px;
   text-decoration: none;
-  border-bottom: 1px solid transparent;
-  padding-bottom: 2px;
+  color: inherit;
 }
 
-.ss-nav-link:hover {
-  border-bottom-color: #000;
+.ss-nav a:first-child {
+  margin-left: 0;
 }
 
-/* --------------------------------------------------
-   Main Content
--------------------------------------------------- */
+.ss-nav a:hover {
+  text-decoration: underline;
+}
 
+/* Main content */
 .ss-main {
   flex: 1;
-  padding: var(--ss-space-3) var(--ss-space-2) var(--ss-space-4);
+  padding: 24px 32px 48px;
 }
 
-/* Headings + text hierarchy */
-
-.ss-main h1 {
-  font-size: 24px;
-  margin: 0 0 var(--ss-space-2);
-}
-
-.ss-main h2 {
-  font-size: 13px;
-  margin: 0 0 var(--ss-space-1);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.ss-main p {
-  margin: 0 0 var(--ss-space-1);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-/* --------------------------------------------------
-   Lists as terminal prompts
--------------------------------------------------- */
-
-.ss-main ul {
-  list-style: none;
-  margin: 0 0 var(--ss-space-2);
-  padding-left: 0;
-}
-
-.ss-main li {
-  position: relative;
-  padding-left: 2ch;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.ss-main li::before {
-  content: '>';
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
-/* --------------------------------------------------
-   Boundaries Block
--------------------------------------------------- */
-
-.ss-boundaries-wrapper {
-  border-top: 1px solid #000;
-  border-bottom: 1px solid #000;
-  background-color: #fafafa;
-}
-
-.ss-boundaries-wrapper > section {
-  padding: var(--ss-space-3) var(--ss-space-2);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-/* --------------------------------------------------
-   Footer
--------------------------------------------------- */
-
+/* Footer */
 .ss-footer {
   border-top: 1px solid #000;
-}
-
-.ss-footer-inner {
-  padding: var(--ss-space-2);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: 11px;
-  text-align: center;
 }
 
-/* --------------------------------------------------
-   Generic tags
--------------------------------------------------- */
+.ss-footer-separator {
+  opacity: 0.6;
+}
+
+/* Text blocks (your existing content) */
 
 h1,
 h2,
-h3 {
+h3,
+h4 {
   font-weight: 600;
+  margin: 0 0 8px;
+}
+
+h1 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+h2 {
+  font-size: 14px;
+  margin-top: 24px;
 }
 
 p {
-  font-size: 12px;
+  margin: 0 0 8px;
 }
 
+/* Use ASCII-style bullets for lists */
+ul {
+  list-style: none;
+  padding-left: 1.5em;
+  margin: 0 0 8px;
+}
+
+ul li::before {
+  content: "> ";
+  margin-left: -1.5em;
+}
+
+/* Keep links looking like docs */
 a {
   color: inherit;
 }
+
+a:hover {
+  text-decoration: underline;
+}
+
 
 
