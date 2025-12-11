@@ -1,5 +1,4 @@
 // app/saas-engine/page.tsx
-import { BoundariesBlock } from '../../components/BoundariesBlock';
 
 export default function SaaSEnginePage() {
   return (
@@ -153,8 +152,6 @@ export default function SaaSEnginePage() {
           (single internal system vs. multiple internal systems/client work).
         </p>
       </section>
-
-      <BoundariesBlock />
     </div>
   );
 }
