@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { apiFetch, ApiError } from '@/lib/api';
 import { StatsCards } from '@/components/dashboard/StatsCards';
 import { SectionCard } from '@/components/dashboard/SectionCard';
+import { PlanTruthPanel } from '@/components/dashboard/PlanTruthPanel';
 
 type MeUser = {
   userId: string;
@@ -39,11 +40,9 @@ export default function DashboardPage() {
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
-          // Not authenticated → send back to login
           router.push('/login');
           return;
         }
-
         setErrorMessage(
           `Failed to load your account (HTTP ${err.status}). Please try again.`
         );
@@ -103,7 +102,6 @@ export default function DashboardPage() {
   }
 
   if (!user) {
-    // Extremely defensive: no user, no error, no loading
     return null;
   }
 
@@ -120,7 +118,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Top line: welcome + basic context */}
       <section className="space-y-1">
         <h1 className="text-2xl font-mono">
           Welcome, <span className="text-emerald-400">{welcomeLabel}</span>
@@ -131,14 +128,16 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      {/* Stats cards: plan / role / created-at */}
       <StatsCards
         plan={user.plan}
         role={user.role}
         createdAtDisplay={createdDisplay}
       />
 
-      {/* Placeholder modules for next phases */}
+      {/* Plan truth row */}
+      <PlanTruthPanel plan={user.plan} />
+
+      {/* Placeholder modules */}
       <section className="grid gap-4 md:grid-cols-3">
         <SectionCard
           title="Modules"
@@ -179,7 +178,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-
-
