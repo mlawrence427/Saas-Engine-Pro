@@ -2,7 +2,13 @@
 // prisma/seed.ts - SaaS Engine Pro
 // ============================================================
 
-import { PrismaClient, Role, PlanTier, AuditAction, AuditEntityType } from '@prisma/client';
+import {
+  PrismaClient,
+  Role,
+  PlanTier,
+  AuditAction,
+  AuditEntityType,
+} from '@prisma/client';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -19,10 +25,10 @@ async function main(): Promise<SeedResult> {
   // 1. SEED FOUNDER ADMIN
   // ============================================================
   const founderEmail = 'founder@saasengine.pro';
-  
+
   // Use env var in production, fallback for dev only
   const plainPassword = process.env.FOUNDER_INITIAL_PASSWORD || 'changeme123';
-  
+
   if (!process.env.FOUNDER_INITIAL_PASSWORD && process.env.NODE_ENV === 'production') {
     throw new Error('❌ FOUNDER_INITIAL_PASSWORD must be set in production');
   }
@@ -73,23 +79,34 @@ async function main(): Promise<SeedResult> {
     console.log('✅ Audited founder creation');
   }
 
-  // ============================================================
+    // ============================================================
   // 2. SEED DEMO MODULES (for testing governance flow)
   // ============================================================
-  const demoModules = [
+  type DemoModuleSeed = {
+    key: string;
+    name: string;
+    slug: string;
+    description: string;
+    minPlan: PlanTier;
+  };
+
+  const demoModules: DemoModuleSeed[] = [
     {
+      key: 'USER_MANAGEMENT',
       name: 'User Management',
       slug: 'user-management',
       description: 'Core user CRUD operations with role-based access',
       minPlan: PlanTier.FREE,
     },
     {
+      key: 'ANALYTICS_DASHBOARD',
       name: 'Analytics Dashboard',
       slug: 'analytics-dashboard',
       description: 'Real-time metrics and reporting for your SaaS',
       minPlan: PlanTier.PRO,
     },
     {
+      key: 'AI_CONTENT_GENERATOR',
       name: 'AI Content Generator',
       slug: 'ai-content-generator',
       description: 'AI-powered content creation with governance controls',
@@ -118,7 +135,11 @@ async function main(): Promise<SeedResult> {
 
     const module = await prisma.module.create({
       data: {
-        ...moduleData,
+        key: moduleData.key,
+        name: moduleData.name,
+        slug: moduleData.slug,
+        description: moduleData.description,
+        minPlan: moduleData.minPlan,
         version: 1,
         isArchived: false,
         publishedAt: new Date(),
@@ -141,6 +162,7 @@ async function main(): Promise<SeedResult> {
           slug: module.slug,
           version: module.version,
           minPlan: module.minPlan,
+          key: module.key,
         },
       },
     });
@@ -159,7 +181,8 @@ async function main(): Promise<SeedResult> {
     const demoDraft = await prisma.aIModuleDraft.create({
       data: {
         title: 'Billing & Invoicing',
-        description: 'AI-generated module for subscription billing, invoice generation, and payment tracking',
+        description:
+          'AI-generated module for subscription billing, invoice generation, and payment tracking',
         status: 'PENDING',
         createdByUserId: founder.id,
         schemaPreview: {
@@ -192,7 +215,11 @@ async function main(): Promise<SeedResult> {
   console.log('\n🎉 Seed complete!');
   console.log('─'.repeat(50));
   console.log(`   Founder: ${founderEmail}`);
-  console.log(`   Password: ${process.env.FOUNDER_INITIAL_PASSWORD ? '(from env)' : plainPassword}`);
+  console.log(
+    `   Password: ${
+      process.env.FOUNDER_INITIAL_PASSWORD ? '(from env)' : plainPassword
+    }`
+  );
   console.log(`   Modules: ${moduleIds.length} seeded`);
   console.log('─'.repeat(50));
   console.log('\n⚠️  Remember to change the founder password after first login!\n');

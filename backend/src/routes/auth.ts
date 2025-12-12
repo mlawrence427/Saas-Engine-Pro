@@ -63,12 +63,24 @@ router.post(
 
       const { email, password } = parseResult.data;
 
+      // Normalize email to match how we store it
+      const normalizedEmail = email.toLowerCase();
+
+      console.log('🔐 Login attempt:', { email: normalizedEmail });
+
       // Find user
       const user = await prisma.user.findUnique({
-        where: { email },
+        where: { email: normalizedEmail },
       });
 
-      if (!user) {
+      console.log('🔍 User lookup result:', {
+        found: !!user,
+        id: user?.id,
+        email: user?.email,
+      });
+
+      if (!user || !user.passwordHash) {
+        console.log('❌ Login failed: user not found or missing password hash');
         throw authenticationError(
           'Invalid email or password',
           ErrorCode.INVALID_CREDENTIALS
@@ -77,7 +89,11 @@ router.post(
 
       // Verify password
       const validPassword = await bcrypt.compare(password, user.passwordHash);
+
+      console.log('🧪 Password valid?', validPassword);
+
       if (!validPassword) {
+        console.log('❌ Login failed: invalid password');
         throw authenticationError(
           'Invalid email or password',
           ErrorCode.INVALID_CREDENTIALS
@@ -92,6 +108,12 @@ router.post(
         plan: user.plan,
       });
       setAuthCookie(res, token);
+
+      console.log('✅ Login successful for user:', {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
 
       res.status(200).json({
         success: true,

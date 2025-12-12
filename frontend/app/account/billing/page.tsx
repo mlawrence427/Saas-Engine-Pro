@@ -18,7 +18,7 @@ type BillingInfo = {
 };
 
 export default function BillingPage() {
-  const { toast } = useToast();
+  //const { toast } = useToast();
 
   const [billing, setBilling] = React.useState<BillingInfo | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);

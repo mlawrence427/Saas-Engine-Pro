@@ -20,7 +20,7 @@ type AccountData = {
 };
 
 export default function AccountPage() {
-  const { toast } = useToast();
+  //const { toast } = useToast();
 
   const [account, setAccount] = React.useState<AccountData | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);

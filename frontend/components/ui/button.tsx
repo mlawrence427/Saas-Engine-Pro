@@ -1,7 +1,7 @@
 "use client";
 
 import { ButtonHTMLAttributes, forwardRef } from "react";
-import { clsx } from "clsx";
+import clsx from "clsx";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "default" | "outline" | "ghost";
