@@ -1,6 +1,6 @@
 // backend/src/routes/billing.routes.ts
 
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import type { User } from '@prisma/client';
 import { prisma } from '../config/database';
@@ -30,6 +30,15 @@ const stripe = STRIPE_SECRET_KEY
       apiVersion: '2024-06-20',
     })
   : null;
+
+type StripeMode = 'test' | 'live' | 'unknown';
+
+function getStripeMode(): StripeMode {
+  if (!STRIPE_SECRET_KEY) return 'unknown';
+  if (STRIPE_SECRET_KEY.startsWith('sk_test_')) return 'test';
+  if (STRIPE_SECRET_KEY.startsWith('sk_live_')) return 'live';
+  return 'unknown';
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -63,6 +72,46 @@ export interface PlanTruthPayload {
   status: PlanTruthStatus;
   stripe: PlanTruthStripeInfo;
   details?: string | null;
+  lastCheckedAt: string; // ISO string
+  stripeMode: StripeMode;
+}
+
+/**
+ * Lightweight in-memory billing event buffer.
+ * This is demo-focused and can later be replaced with a Prisma model.
+ */
+
+type BillingEventSource = 'local' | 'stripe_webhook';
+
+interface BillingEvent {
+  id: string;
+  createdAt: string;
+  type: string;
+  source: BillingEventSource;
+  summary: string;
+}
+
+const BILLING_EVENT_BUFFER_LIMIT = 200;
+const billingEvents: BillingEvent[] = [];
+
+function recordBillingEvent(input: {
+  type: string;
+  source: BillingEventSource;
+  summary: string;
+}) {
+  const event: BillingEvent = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    type: input.type,
+    source: input.source,
+    summary: input.summary,
+  };
+
+  // newest first
+  billingEvents.unshift(event);
+  if (billingEvents.length > BILLING_EVENT_BUFFER_LIMIT) {
+    billingEvents.pop();
+  }
 }
 
 const priceToPlanMap: Record<string, string> = {};
@@ -106,6 +155,9 @@ async function getCurrentSubscriptionForCustomer(
  * Compute the plan truth for a given user without mutating the DB.
  */
 async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
+  const now = new Date().toISOString();
+  const stripeMode = getStripeMode();
+
   if (!stripe || !STRIPE_PRICE_PRO_MONTHLY) {
     return {
       internalPlan: user.plan,
@@ -119,6 +171,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
       },
       details:
         'Stripe secret key or required price IDs are not configured. Plan truth is internal-only.',
+      lastCheckedAt: now,
+      stripeMode,
     };
   }
 
@@ -136,6 +190,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
         mappedPlan: null,
       },
       details: 'User does not have a stripeCustomerId.',
+      lastCheckedAt: now,
+      stripeMode,
     };
   }
 
@@ -156,6 +212,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
           mappedPlan: null,
         },
         details: 'No subscriptions found for Stripe customer.',
+        lastCheckedAt: now,
+        stripeMode,
       };
     }
 
@@ -175,6 +233,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
           mappedPlan: null,
         },
         details: `Stripe price ${priceId} does not have a mapping to an internal plan.`,
+        lastCheckedAt: now,
+        stripeMode,
       };
     }
 
@@ -195,6 +255,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
         status === 'desynced'
           ? 'Internal plan does not match Stripe subscription mapped plan.'
           : null,
+      lastCheckedAt: now,
+      stripeMode,
     };
   } catch (err: any) {
     console.error('[billing] Stripe error in computePlanTruth:', err);
@@ -209,6 +271,8 @@ async function computePlanTruth(user: User): Promise<PlanTruthPayload> {
         mappedPlan: null,
       },
       details: err?.message ?? 'Unknown Stripe error.',
+      lastCheckedAt: now,
+      stripeMode,
     };
   }
 }
@@ -319,6 +383,13 @@ router.post(
         },
       });
 
+      // Record local billing event for audit log
+      recordBillingEvent({
+        type: 'checkout.session.created',
+        source: 'local',
+        summary: `Started PRO upgrade for ${dbUser.email} (price: ${STRIPE_PRICE_PRO_MONTHLY}).`,
+      });
+
       return res.status(201).json({
         success: true,
         data: {
@@ -352,6 +423,13 @@ router.post(
       const mappedPlan = truthBefore.stripe.mappedPlan;
 
       if (!mappedPlan) {
+        recordBillingEvent({
+          type: 'billing.sync.skipped',
+          source: 'local',
+          summary:
+            'Sync skipped: Stripe subscription does not map to a known internal plan.',
+        });
+
         return res.status(400).json({
           success: false,
           error:
@@ -361,6 +439,13 @@ router.post(
       }
 
       if (truthBefore.status === 'synced') {
+        recordBillingEvent({
+          type: 'billing.plan.already_synced',
+          source: 'local',
+          summary:
+            'Sync requested but internal plan already matches Stripe-mapped plan.',
+        });
+
         return res.json({
           success: true,
           data: truthBefore,
@@ -373,12 +458,14 @@ router.post(
         data: { plan: mappedPlan },
       });
 
-      const truthAfter: PlanTruthPayload = {
-        ...truthBefore,
-        internalPlan: updatedUser.plan,
-        status: 'synced',
-        details: 'Internal plan updated from Stripe subscription.',
-      };
+      // Recompute truth after updating the internal plan
+      const truthAfter = await computePlanTruth(updatedUser);
+
+      recordBillingEvent({
+        type: 'billing.plan.synced_from_stripe',
+        source: 'local',
+        summary: `Updated internal plan for ${updatedUser.email} to ${mappedPlan} using current Stripe subscription.`,
+      });
 
       return res.json({
         success: true,
@@ -386,6 +473,13 @@ router.post(
       });
     } catch (err: any) {
       console.error('[billing] /sync handler error:', err);
+
+      recordBillingEvent({
+        type: 'billing.sync.error',
+        source: 'local',
+        summary: `Error while syncing plan from Stripe: ${err?.message || 'Unknown error'}.`,
+      });
+
       return res.status(500).json({
         success: false,
         error: err?.message || 'Failed to sync plan from Stripe.',
@@ -394,7 +488,40 @@ router.post(
   }
 );
 
+/**
+ * GET /api/billing/webhook-events
+ * Returns recent billing events (local +, in future, Stripe webhooks).
+ */
+router.get(
+  '/webhook-events',
+  requireAuth,
+  async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limitParam = _req.query.limit;
+      const limitRaw =
+        typeof limitParam === 'string' ? parseInt(limitParam, 10) : NaN;
+      const limit =
+        !isNaN(limitRaw) && limitRaw > 0 && limitRaw <= BILLING_EVENT_BUFFER_LIMIT
+          ? limitRaw
+          : 50;
+
+      return res.json({
+        success: true,
+        data: billingEvents.slice(0, limit),
+      });
+    } catch (err: any) {
+      console.error('[billing] /webhook-events handler error:', err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || 'Failed to load billing events.',
+      });
+    }
+  }
+);
+
 export default router;
+
+
 
 
 

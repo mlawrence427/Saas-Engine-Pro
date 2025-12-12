@@ -2,177 +2,197 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
-import PlanTruthPanel from './PlanTruthPanel';
+import { PlanTruthPanel } from './PlanTruthPanel';
 
-interface CheckoutSessionResponse {
+interface ApiResponse<T> {
   success: boolean;
-  data?: {
-    url: string;
-  };
-  error?: string;
-}
-
-interface SyncResponse {
-  success: boolean;
-  data?: any;
+  data?: T;
   error?: string;
   message?: string;
 }
 
-export default function PlansBillingClient() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const checkoutStatus = searchParams.get('checkout');
+interface CheckoutData {
+  url: string;
+}
 
-  const [refreshSignal, setRefreshSignal] = useState(0);
-  const [isUpgrading, setIsUpgrading] = useState(false);
+function PlansBillingClientInner() {
+  const [banner, setBanner] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+
+  const [isCreatingCheckout, setIsCreatingCheckout] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [banner, setBanner] = useState<string | null>(null);
-  const [bannerTone, setBannerTone] = useState<'neutral' | 'success' | 'error'>(
-    'neutral'
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [autoSynced, setAutoSynced] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Handle checkout=success query param: show banner and attempt auto-sync once.
+  // Handle ?checkout=success / ?checkout=cancelled
   useEffect(() => {
-    if (checkoutStatus === 'success' && !autoSynced) {
-      setBanner('Checkout completed. Syncing billing state…');
-      setBannerTone('neutral');
-      setAutoSynced(true);
-      void handleSync(true);
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    const checkoutStatus = url.searchParams.get('checkout');
+
+    if (checkoutStatus === 'success') {
+      setBanner({
+        type: 'info',
+        message:
+          'Checkout completed. Fetching subscription from Stripe and updating DB plan…',
+      });
+
+      // Trigger sync automatically (silent=true so we don’t clear the banner)
+      handleSyncFromStripe(true);
+
+      url.searchParams.delete('checkout');
+      window.history.replaceState({}, '', url.toString());
     } else if (checkoutStatus === 'cancelled') {
-      setBanner('Checkout cancelled. No changes were made.');
-      setBannerTone('neutral');
+      setBanner({
+        type: 'error',
+        message: 'Checkout was cancelled. No changes were made.',
+      });
+      url.searchParams.delete('checkout');
+      window.history.replaceState({}, '', url.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkoutStatus]);
+  }, []);
 
-  async function handleUpgrade() {
-    setIsUpgrading(true);
-    setError(null);
+  const handleUpgradeToPro = async () => {
     setBanner(null);
+    setIsCreatingCheckout(true);
 
     try {
-      const res = (await apiFetch(
-        '/api/billing/create-checkout-session',
-        {
-          method: 'POST',
-        }
-      )) as CheckoutSessionResponse;
+      const res = await apiFetch('/api/billing/create-checkout-session', {
+        method: 'POST',
+      });
 
-      if (!res.success || !res.data?.url) {
-        throw new Error(res.error || 'Failed to create Checkout Session.');
+      const json = res as ApiResponse<CheckoutData>;
+
+      if (!json.success || !json.data?.url) {
+        throw new Error(json.error || 'Failed to create Checkout session');
       }
 
-      // Hard redirect to Stripe Checkout
-      window.location.href = res.data.url;
+      window.location.href = json.data.url;
     } catch (err: any) {
-      setError(err?.message || 'Failed to start upgrade.');
-      setBanner('Failed to start upgrade. See error below.');
-      setBannerTone('error');
-      setIsUpgrading(false);
+      console.error('Failed to start upgrade:', err);
+      setBanner({
+        type: 'error',
+        message:
+          err?.message ||
+          'Failed to start upgrade. Check backend logs and Stripe configuration.',
+      });
+    } finally {
+      setIsCreatingCheckout(false);
     }
-  }
+  };
 
-  async function handleSync(isAuto = false) {
+  const handleSyncFromStripe = async (silent = false) => {
+    if (!silent) {
+      setBanner(null);
+    }
     setIsSyncing(true);
-    setError(null);
 
     try {
-      const res = (await apiFetch('/api/billing/sync', {
+      const res = await apiFetch('/api/billing/sync', {
         method: 'POST',
-      })) as SyncResponse;
+      });
 
-      if (!res.success) {
+      const json = res as ApiResponse<unknown>;
+
+      if (!json.success) {
         throw new Error(
-          res.error || 'Sync failed. Check Stripe configuration.'
+          json.error ||
+            'Failed to pull current state from Stripe. See server logs for details.'
         );
       }
 
-      setBanner(
-        isAuto
-          ? 'Billing state synced from Stripe.'
-          : 'Manual sync successful. Plan updated from Stripe.'
-      );
-      setBannerTone('success');
+      setRefreshKey((k) => k + 1);
 
-      // Bump refresh signal so PlanTruthPanel refetches.
-      setRefreshSignal((v) => v + 1);
-
-      // Clean up the checkout query param if we just handled an auto-sync.
-      if (isAuto && checkoutStatus === 'success') {
-        const params = new URLSearchParams(Array.from(searchParams.entries()));
-        params.delete('checkout');
-        router.replace(`/dashboard/plans${params.toString() ? `?${params}` : ''}`);
-      }
+      setBanner({
+        type: 'success',
+        message:
+          'Plan updated using current Stripe subscription state. Internal plan now reflects Stripe truth.',
+      });
     } catch (err: any) {
-      setError(err?.message || 'Failed to sync from Stripe.');
-      setBanner('Failed to sync billing state from Stripe.');
-      setBannerTone('error');
+      console.error('Failed to sync from Stripe:', err);
+      setBanner({
+        type: 'error',
+        message:
+          err?.message ||
+          'Failed to pull current state from Stripe. Check backend logs and Stripe configuration.',
+      });
     } finally {
       setIsSyncing(false);
     }
-  }
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
+      {/* Top banner */}
       {banner && (
         <div
-          className={[
-            'border px-3 py-2 text-xs font-mono uppercase tracking-wide',
-            bannerTone === 'success'
-              ? 'border-emerald-500 text-emerald-400 bg-emerald-950/40'
-              : bannerTone === 'error'
-              ? 'border-red-500 text-red-400 bg-red-950/40'
-              : 'border-neutral-600 text-neutral-300 bg-neutral-900',
-          ].join(' ')}
+          className={`border px-4 py-2 text-xs ${
+            banner.type === 'success'
+              ? 'border-emerald-700 bg-emerald-950 text-emerald-200'
+              : banner.type === 'error'
+              ? 'border-red-700 bg-red-950 text-red-200'
+              : 'border-neutral-700 bg-neutral-950 text-neutral-200'
+          }`}
         >
-          {banner}
+          {banner.message}
         </div>
       )}
 
-      <div className="border border-neutral-800 bg-black p-4 space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <div className="font-mono text-[10px] uppercase text-neutral-400">
+      {/* Controls */}
+      <div className="flex flex-col gap-3 border border-neutral-900 bg-black p-4 text-xs text-neutral-200">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
               Plan Controls
-            </div>
-            <div className="font-mono text-xs text-neutral-200">
-              Upgrade and sync against Stripe billing truth.
-            </div>
+            </span>
+            <span className="text-[11px] text-neutral-400">
+              Upgrade and reconcile against Stripe billing truth.
+            </span>
           </div>
-
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2">
             <button
-              type="button"
-              onClick={handleUpgrade}
-              disabled={isUpgrading}
-              className="px-3 py-1 border border-neutral-700 bg-neutral-950 text-neutral-100 text-xs font-mono uppercase tracking-wide hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleUpgradeToPro}
+              disabled={isCreatingCheckout || isSyncing}
+              className="border border-neutral-700 bg-neutral-950 px-3 py-1 text-[11px] uppercase tracking-wide text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isUpgrading ? 'Redirecting…' : 'Upgrade to PRO'}
+              {isCreatingCheckout ? 'Redirecting…' : 'Upgrade to PRO'}
             </button>
             <button
-              type="button"
-              onClick={() => handleSync(false)}
-              disabled={isSyncing}
-              className="px-3 py-1 border border-neutral-700 bg-neutral-950 text-neutral-100 text-xs font-mono uppercase tracking-wide hover:bg-neutral-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => handleSyncFromStripe(false)}
+              disabled={isSyncing || isCreatingCheckout}
+              className="border border-neutral-700 bg-neutral-950 px-3 py-1 text-[11px] uppercase tracking-wide text-neutral-100 hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSyncing ? 'Syncing…' : 'Resync from Stripe'}
+              {isSyncing ? 'Pulling from Stripe…' : 'Pull current state from Stripe'}
             </button>
           </div>
         </div>
-
-        {error && (
-          <div className="border border-red-700 bg-red-950/40 text-red-300 text-xs font-mono px-3 py-2 mt-2">
-            Error: {error}
-          </div>
-        )}
       </div>
 
-      <PlanTruthPanel refreshSignal={refreshSignal} />
+      {/* Plan Truth */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-300">
+          Plan Truth
+        </h3>
+        <p className="mb-2 text-[11px] text-neutral-400">
+          Local Enforcement (DB) on the left. External Truth (Stripe) on the right. Status
+          shows whether they currently agree.
+        </p>
+        <PlanTruthPanel refreshKey={refreshKey} />
+      </div>
     </div>
   );
 }
+
+// Named export (if you ever want it)
+export function PlansBillingClient() {
+  return <PlansBillingClientInner />;
+}
+
+// Default export used by the page component
+export default PlansBillingClientInner;
+
+
