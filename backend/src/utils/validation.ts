@@ -1,17 +1,27 @@
-// src/utils/validation.ts
+// backend/src/utils/validation.ts
+
 import { z } from 'zod';
 
-/**
- * Schema for creating a Stripe Checkout session.
- * Used by billing routes.
- */
-export const checkoutSchema = z.object({
-  priceId: z.string().min(1, 'priceId is required'),
-  successUrl: z.string().url('successUrl must be a valid URL'),
-  cancelUrl: z.string().url('cancelUrl must be a valid URL'),
+// Login schema
+export const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Invalid email address'),
+  password: z
+    .string()
+    .min(6, 'Password must be at least 6 characters'),
 });
 
-// Export a namespace-style object in case old code does `validation.checkoutSchema`
-export const validation = {
-  checkoutSchema,
-};
+// Register schema
+export const registerSchema = z.object({
+  email: z
+    .string()
+    .min(1, 'Email is required')
+    .email('Invalid email address'),
+  password: z
+    .string()
+    .min(6, 'Password must be at least 6 characters'),
+});
+
+
