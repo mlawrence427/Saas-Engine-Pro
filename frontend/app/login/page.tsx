@@ -1,155 +1,140 @@
 // frontend/app/login/page.tsx
-"use client";
+'use client';
 
-import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { apiFetch, ApiError } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import Link from 'next/link';
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
-
-type LoginFormState = {
-  email: string;
-  password: string;
-};
+interface LoginResponse {
+  success: boolean;
+  data: {
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      plan: string;
+    };
+    token: string;
+  };
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [form, setForm] = React.useState<LoginFormState>({
-    email: "user@test.com",
-    password: "password",
-  });
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const next = searchParams.get("next") || "/dashboard";
+  const next = searchParams.get('next') || '/dashboard';
 
-  const handleChange = (field: keyof LoginFormState) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      setForm(prev => ({ ...prev, [field]: event.target.value }));
-    };
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setErrorMessage(null);
-
-    if (!form.email || !form.password) {
-      setErrorMessage("Please enter both email and password.");
-      return;
-    }
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    setSubmitting(true);
 
     try {
-      setIsSubmitting(true);
+      const body = { email, password };
 
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+      const res = await apiFetch<LoginResponse>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        const message =
-          data?.message || "Invalid credentials. Please try again.";
-        setErrorMessage(message);
+      if (!res.success || !res.data?.user) {
+        setErr('Invalid credentials');
+        setSubmitting(false);
         return;
       }
 
-      // Successful login → redirect
+      // At this point cookie is already set by the backend.
       router.push(next);
-      router.refresh();
     } catch (error) {
-      console.error(error);
-      setErrorMessage("Unexpected error while logging in.");
+      const apiErr = error as ApiError;
+      if (apiErr.code === 'INVALID_CREDENTIALS') {
+        setErr('Invalid credentials');
+      } else {
+        setErr(apiErr.message || 'Login failed');
+      }
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900 px-4">
-      <div className="w-full max-w-lg">
-        <div className="mb-10 text-center space-y-2">
-          <p className="text-xs tracking-[0.35em] text-slate-400 uppercase">
-            SaaS Engine Pro
-          </p>
-          <h1 className="text-3xl md:text-4xl font-semibold text-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-[#050711]">
+      <div className="w-full max-w-md border border-zinc-800 bg-black px-10 py-8">
+        <div className="mb-8 text-center">
+          <div className="text-xs tracking-[0.3em] text-zinc-500 mb-2">
+            SAAS ENGINE PRO
+          </div>
+          <h1 className="text-xl font-medium text-zinc-50">
             Sign in to your control plane
           </h1>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
+          <p className="mt-2 text-xs text-zinc-500">
             Govern AI-generated modules, plans, and users from a single OS.
           </p>
         </div>
 
-        <Card className="bg-slate-950/60 border-slate-800 text-slate-50">
-          <CardHeader>
-            <CardTitle>Login</CardTitle>
-            <CardDescription className="text-slate-400">
-              Enter your credentials to access the SaaS Engine Pro console.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  value={form.email}
-                  onChange={handleChange("email")}
-                  placeholder="you@example.com"
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-zinc-300">Email</label>
+            <Input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="bg-black border-zinc-700 text-zinc-50 text-sm"
+              required
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={form.password}
-                  onChange={handleChange("password")}
-                  placeholder="••••••••"
-                />
-              </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-zinc-300">
+              Password
+            </label>
+            <Input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-black border-zinc-700 text-zinc-50 text-sm"
+              required
+            />
+          </div>
 
-              {errorMessage && (
-                <p className="text-sm text-red-400 mt-2">{errorMessage}</p>
-              )}
+          {err && (
+            <div className="border border-red-900 bg-red-950 px-3 py-2 text-xs text-red-300">
+              {err}
+            </div>
+          )}
 
-              <Button
-                type="submit"
-                className="w-full mt-4"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Signing in..." : "Sign in"}
-              </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex justify-between text-xs text-slate-400">
-            <span>New to SaaS Engine Pro?</span>
-            <Link
-              href="/register"
-              className="font-medium text-blue-400 hover:text-blue-300"
-            >
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-zinc-50 text-black text-xs tracking-[0.2em] rounded-none hover:bg-zinc-200"
+          >
+            {submitting ? 'SIGNING IN…' : 'SIGN IN'}
+          </Button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-[11px] text-zinc-500">
+            New to SaaS Engine Pro?{' '}
+            <Link href="/register" className="underline">
               Create an account
             </Link>
-          </CardFooter>
-        </Card>
+          </p>
+        </div>
       </div>
     </div>
   );
 }
+
+
+
 

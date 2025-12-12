@@ -1,53 +1,61 @@
-// src/app.ts
+// backend/src/app.ts
+
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import morgan from 'morgan';
 
-import authRouter from './routes/auth.routes';
-import userRouter from './routes/user.routes';
-import modulesRouter from './routes/modules';
-import stripeWebhookRouter from './routes/stripe.webhooks';
-import billingRouter from './routes/billing.routes';
-import protectedRouter from './routes/protected.routes';
+import authRoutes from './routes/auth';
+import billingRoutes from './routes/billing.routes'; // if present
+// import other route files as needed...
 
 const app = express();
 
-/**
- * ✅ IMPORTANT:
- * Stripe webhooks must be mounted BEFORE express.json()
- * so that the raw request body is available for signature verification.
- */
-app.use('/api/webhooks', stripeWebhookRouter);
+// -----------------------------------------------------------
+// CORS – allow Next.js frontend (http://localhost:3000)
+// to send credentials (cookies) to backend (http://localhost:4000)
+// -----------------------------------------------------------
 
-// ✅ Normal middleware AFTER webhooks
-app.use(cookieParser());
-app.use(express.json());
+const FRONTEND_ORIGIN =
+  process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+
 app.use(
   cors({
-    origin: true,
-    credentials: true,
+    origin: FRONTEND_ORIGIN,
+    credentials: true, // allow cookies
   })
 );
 
+// -----------------------------------------------------------
+// Global middleware
+// -----------------------------------------------------------
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(morgan('dev'));
+
+// -----------------------------------------------------------
 // Health check
+// -----------------------------------------------------------
+
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// Auth & user
-app.use('/api/auth', authRouter);
-app.use('/api/user', userRouter);
+// -----------------------------------------------------------
+// API routes
+// -----------------------------------------------------------
 
-// Modules registry (read-only public for now)
-app.use('/api/modules', modulesRouter);
+app.use('/api/auth', authRoutes);
+app.use('/api/billing', billingRoutes); // if you have this
 
-// Billing + subscription control (checkout, portal, sync, me)
-app.use('/api/billing', billingRouter);
-
-// Demo protected routes (plan-gated endpoints)
-app.use('/api/protected', protectedRouter);
+// TODO: attach error-handling middleware if you have it
+// import { errorHandler } from './middleware/error-handler';
+// app.use(errorHandler);
 
 export default app;
+
+
 
 
 

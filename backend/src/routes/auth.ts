@@ -1,6 +1,6 @@
 // ============================================================
 // backend/src/routes/auth.ts - SaaS Engine Pro
-// Authentication Routes (Login, Register, Logout)
+// Authentication Routes (Login, Register, Logout, Me)
 // ============================================================
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -30,6 +30,7 @@ function generateToken(user: {
   role: string;
   plan: string;
 }): string {
+  // IMPORTANT: payload uses userId (not id) to match middleware
   return signAccessToken({
     userId: user.id,
     email: user.email,
@@ -55,7 +56,6 @@ router.post(
   '/login',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // Validate input
       const parseResult = loginSchema.safeParse(req.body);
       if (!parseResult.success) {
         throw fromZodError(parseResult.error);
@@ -63,12 +63,10 @@ router.post(
 
       const { email, password } = parseResult.data;
 
-      // Normalize email to match how we store it
       const normalizedEmail = email.toLowerCase();
 
       console.log('🔐 Login attempt:', { email: normalizedEmail });
 
-      // Find user
       const user = await prisma.user.findUnique({
         where: { email: normalizedEmail },
       });
@@ -87,7 +85,6 @@ router.post(
         );
       }
 
-      // Verify password
       const validPassword = await bcrypt.compare(password, user.passwordHash);
 
       console.log('🧪 Password valid?', validPassword);
@@ -100,20 +97,16 @@ router.post(
         );
       }
 
-      // Generate token and set cookie
       const token = generateToken({
         id: user.id,
         email: user.email,
         role: user.role,
         plan: user.plan,
       });
+
       setAuthCookie(res, token);
 
-      console.log('✅ Login successful for user:', {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      });
+      console.log('✅ Login successful, token issued');
 
       res.status(200).json({
         success: true,
@@ -125,7 +118,7 @@ router.post(
             role: user.role,
             plan: user.plan,
           },
-          token,
+          token, // also returned for debugging
         },
       });
     } catch (error) {
@@ -142,7 +135,6 @@ router.post(
   '/register',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // Validate input
       const parseResult = registerSchema.safeParse(req.body);
       if (!parseResult.success) {
         throw fromZodError(parseResult.error);
@@ -150,34 +142,33 @@ router.post(
 
       const { email, password } = parseResult.data;
 
-      // Check if user exists
+      const normalizedEmail = email.toLowerCase();
+
       const existingUser = await prisma.user.findUnique({
-        where: { email },
+        where: { email: normalizedEmail },
       });
 
       if (existingUser) {
         throw conflictError('An account with this email already exists', {
-          email,
+          email: normalizedEmail,
         });
       }
 
-      // Create user
       const passwordHash = await bcrypt.hash(password, 10);
 
       const user = await prisma.user.create({
         data: {
-          email,
+          email: normalizedEmail,
           passwordHash,
           role: 'USER',
           plan: 'FREE',
         },
       });
 
-      // Audit log
       await prisma.auditLog.create({
         data: {
           action: AuditAction.USER_CREATED,
-          entityType: 'USER', // string column in Prisma schema
+          entityType: 'USER',
           entityId: user.id,
           performedByUserId: user.id,
           metadata: {
@@ -187,13 +178,13 @@ router.post(
         },
       });
 
-      // Generate token and set cookie
       const token = generateToken({
         id: user.id,
         email: user.email,
         role: user.role,
         plan: user.plan,
       });
+
       setAuthCookie(res, token);
 
       res.status(201).json({
@@ -234,10 +225,14 @@ router.post('/logout', (_req: Request, res: Response): void => {
 router.get(
   '/me',
   requireAuth,
-  async (req: any, res: Response, next: NextFunction): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      console.log('👤 /me payload:', req.user);
+
+      const userId = req.user!.userId;
+
       const user = await prisma.user.findUnique({
-        where: { id: req.user!.id },
+        where: { id: userId },
         select: {
           id: true,
           email: true,
@@ -249,7 +244,7 @@ router.get(
       });
 
       if (!user) {
-        throw notFoundError('User', req.user!.id);
+        throw notFoundError('User', userId);
       }
 
       res.status(200).json({
@@ -263,4 +258,5 @@ router.get(
 );
 
 export default router;
+
 

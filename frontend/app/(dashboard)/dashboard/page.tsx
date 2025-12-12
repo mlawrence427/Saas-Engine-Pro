@@ -1,153 +1,136 @@
-"use client";
+// frontend/app/(dashboard)/dashboard/page.tsx
+'use client';
 
-import { useEffect, useState } from "react";
-import AuthGuard from "@/components/auth/AuthGuard";
-import { useAuth } from "@/context/AuthContext";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { apiFetch, ApiError } from '@/lib/api';
 
-type PlanTier = "FREE" | "PRO" | "ENTERPRISE";
-
-type Module = {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string | null;
-  version: string;
-  minPlan: PlanTier;
-  isActive: boolean;
-  isSystem: boolean;
-  requiresReview: boolean;
-};
-
-const PLAN_LABELS: Record<PlanTier, string> = {
-  FREE: "Free",
-  PRO: "Pro",
-  ENTERPRISE: "Enterprise",
-};
+interface MeResponse {
+  success: boolean;
+  data?: {
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      plan: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+  };
+}
 
 export default function DashboardPage() {
-  const { user } = useAuth();
-  const [modules, setModules] = useState<Module[]>([]);
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [user, setUser] = useState<MeResponse['data'] extends { user: infer U } ? U | null : null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchModules = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+    let cancelled = false;
 
-        const res = await fetch("http://localhost:3001/api/modules", {
-          credentials: "include",
+    async function load() {
+      setLoading(true);
+      setErr(null);
+
+      try {
+        const res = await apiFetch<MeResponse>('/api/auth/me', {
+          method: 'GET',
         });
 
-        if (!res.ok) {
-          throw new Error(`Failed to load modules (${res.status})`);
+        if (!res.success || !res.data?.user) {
+          throw { status: 401, message: 'Invalid /me response' } as ApiError;
         }
 
-        const data = (await res.json()) as Module[];
-        setModules(data);
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message ?? "Failed to load modules");
-      } finally {
-        setLoading(false);
-      }
-    };
+        if (!cancelled) {
+          setUser(res.data.user);
+        }
+      } catch (error: any) {
+        console.error('Failed to load /me:', error);
 
-    fetchModules();
-  }, []);
+        if (!cancelled) {
+          // If unauthorized, send back to login with next=/dashboard
+          if (error?.status === 401 || error?.status === 403) {
+            router.push('/login?next=/dashboard');
+          } else {
+            setErr(error?.message || 'Failed to load dashboard');
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-slate-300 tracking-wide uppercase">
+          Loading control plane…
+        </p>
+      </main>
+    );
+  }
+
+  if (err) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div className="border border-red-500/40 bg-red-950/20 px-6 py-4 text-sm text-red-200">
+          {err}
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    // Fallback: if somehow no user, send to login
+    if (typeof window !== 'undefined') {
+      router.push('/login?next=/dashboard');
+    }
+    return null;
+  }
 
   return (
-    <AuthGuard>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+    <main className="min-h-screen px-6 py-10">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <header className="flex items-baseline justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Dashboard</h1>
-            <p className="text-sm text-gray-500">
-              Welcome back{user?.email ? `, ${user.email}` : ""}. Here are the
-              modules available on your plan.
+            <h1 className="text-xl font-semibold tracking-tight">
+              SaaS Engine Pro – Control Plane
+            </h1>
+            <p className="mt-1 text-xs text-slate-400 uppercase tracking-[0.16em]">
+              Signed in as {user.email} · {user.role} · {user.plan}
             </p>
           </div>
-          {user?.plan && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-              <span className="h-2 w-2 rounded-full bg-blue-500" />
-              Current plan: {user.plan}
+        </header>
+
+        <section className="border border-slate-800 bg-black/40 p-6 text-sm">
+          <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400 mb-4">
+            SESSION STATE
+          </h2>
+          <div className="grid gap-2 text-slate-200">
+            <div className="flex justify-between">
+              <span className="text-slate-400">User ID</span>
+              <span className="font-mono text-xs">{user.id}</span>
             </div>
-          )}
-        </div>
-
-        {/* Error / loading state */}
-        {error && (
-          <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-            {error}
+            <div className="flex justify-between">
+              <span className="text-slate-400">Role</span>
+              <span className="font-mono text-xs">{user.role}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Plan</span>
+              <span className="font-mono text-xs">{user.plan}</span>
+            </div>
           </div>
-        )}
-
-        {loading && !error && (
-          <p className="text-sm text-gray-500">Loading your modules…</p>
-        )}
-
-        {/* Empty state */}
-        {!loading && modules.length === 0 && !error && (
-          <div className="border rounded-lg p-6 text-sm text-gray-500 bg-white shadow-sm">
-            No modules are currently available on your plan yet.
-          </div>
-        )}
-
-        {/* Module cards */}
-        {!loading && modules.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {modules.map((m) => (
-              <div
-                key={m.id}
-                className="border rounded-xl bg-white shadow-sm p-4 flex flex-col gap-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 className="font-semibold text-sm">{m.name}</h2>
-                    {m.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-3">
-                        {m.description}
-                      </p>
-                    )}
-                  </div>
-                  <span className="inline-flex items-center rounded-full bg-gray-50 border border-gray-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600">
-                    {PLAN_LABELS[m.minPlan]}
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  {m.isSystem && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-700">
-                      System
-                    </span>
-                  )}
-                  {!m.isSystem && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-[10px] text-green-700">
-                      App Module
-                    </span>
-                  )}
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-[10px] text-gray-600">
-                    v{m.version || "1.0.0"}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between text-[11px] text-gray-500">
-                  <span className="truncate text-gray-400">{m.slug}</span>
-                  <button
-                    type="button"
-                    className="text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Open
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        </section>
       </div>
-    </AuthGuard>
+    </main>
   );
 }
 
