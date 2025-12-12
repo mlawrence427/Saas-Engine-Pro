@@ -1,24 +1,23 @@
-// app/saas-engine/page.tsx
+// app/expiry-signal/page.tsx
 
-export default function SaaSEnginePage() {
+export default function ExpirySignalPage() {
   return (
     <div className="space-y-8">
       <section className="border border-black p-4">
-        <h1 className="text-lg mb-1 tracking-tight">SaaS Engine</h1>
+        <h1 className="text-lg mb-1 tracking-tight">ExpirySignal</h1>
         <p className="text-xs mb-2">
-          Self-hosted plan and account state engine. Signal-only.
+          Self-hosted expiration signal primitive. Signal-only.
         </p>
         <p className="text-xs mb-2">
-          SaaS Engine is a self-hosted plan and account state engine.
+          ExpirySignal is a self-hosted expiration signal primitive.
         </p>
         <p className="text-xs mb-2">
-          It pulls billing truth from your payment provider and exposes
-          deterministic internal state your application can consult at runtime.
+          It stores and returns whether an entity is expired or not expired at
+          read time.
         </p>
         <p className="text-xs mb-2">
-          SaaS Engine does not authenticate users, authorize actions, or enforce
-          access control. It emits plan and account state only. Your code must
-          decide what to do.
+          ExpirySignal does not expire anything automatically. It emits
+          expiration state only.
         </p>
         <p className="text-[10px]">
           This page describes emitted state semantics. It is not integration
@@ -31,9 +30,8 @@ export default function SaaSEnginePage() {
           What it emits
         </h2>
         <ul className="list-disc list-inside">
-          <li>Account status (active, canceled, past_due, etc.)</li>
-          <li>Plan and entitlement state</li>
-          <li>Billing truth mapped into internal application state</li>
+          <li>Expired</li>
+          <li>Not expired</li>
         </ul>
       </section>
 
@@ -42,10 +40,10 @@ export default function SaaSEnginePage() {
           What it does not do
         </h2>
         <ul className="list-disc list-inside">
+          <li>Does not invalidate tokens</li>
+          <li>Does not revoke sessions</li>
+          <li>Does not log users out</li>
           <li>Does not block requests</li>
-          <li>Does not revoke access</li>
-          <li>Does not enforce billing or permissions</li>
-          <li>Does not act as a security system</li>
         </ul>
       </section>
 
@@ -54,19 +52,22 @@ export default function SaaSEnginePage() {
           Typical use
         </h2>
         <p>
-          Before executing a paid feature, your application queries SaaS Engine
-          for current plan state and explicitly decides and executes behavior in
-          your own code.
+          Your application checks expiration state before executing
+          time-sensitive actions and explicitly decides how to proceed.
         </p>
       </section>
 
       <section className="border border-black p-4 text-xs space-y-2">
-        <h2 className="uppercase text-[11px] tracking-tight mb-2">Important</h2>
+        <h2 className="uppercase text-[11px] tracking-tight mb-2">
+          Important
+        </h2>
         <p>
-          Absence of a restriction is not permission. If state cannot be
-          confirmed, your application must handle the outcome explicitly.
+          Not expired ≠ authorized. Expiration state is advisory, not
+          enforcement.
         </p>
-        <p>Self-hosted. Signal-only. No SLAs. No emergency support.</p>
+        <p>
+          Self-hosted. Signal-only. No background jobs.
+        </p>
       </section>
 
       <section className="border border-black p-4 text-xs space-y-2">
@@ -74,14 +75,14 @@ export default function SaaSEnginePage() {
           Delivery format
         </h2>
         <p>
-          SaaS Engine is delivered as a self-hosted codebase (database schema,
+          ExpirySignal is delivered as a self-hosted codebase (database schema,
           server code, and supporting files) via Lemon Squeezy after purchase.
           You are responsible for deployment, configuration, and operation in
           your environment.
         </p>
         <p>
-          There is no hosted version, no managed control plane, and no remote
-          dependency on SimpleStates infrastructure.
+          There is no hosted service, no remote scheduler, and no background
+          execution provided by SimpleStates.
         </p>
       </section>
 
@@ -90,30 +91,23 @@ export default function SaaSEnginePage() {
           Limitations &amp; failure modes
         </h2>
         <p>
-          State lookups may reflect stale, inconsistent, or incorrect data
-          depending on how and when external truth is synced into SaaS Engine.
-          No guarantees are made about accuracy, freshness, completeness, or
-          timeliness of emitted state.
+          Expiration state may be stale or incorrect depending on how and when
+          your system writes or updates expiry data. No guarantees are made
+          about accuracy, freshness, or timing.
         </p>
         <p>
           Lookups may fail, return unexpected data, or reflect partial writes if
-          your environment, database, or integrations are misconfigured or
-          unhealthy. There are no transactional or distributed consistency
-          guarantees.
-        </p>
-        <p>
-          SaaS Engine emits stored state only. It does not validate whether that
-          state is legally, commercially, or operationally appropriate for your
-          use case.
+          your environment or database is unhealthy. There are no execution or
+          delivery guarantees.
         </p>
       </section>
 
       <section className="border border-black p-4 text-xs space-y-2">
         <h2 className="uppercase text-[11px] tracking-tight mb-2">Purchase</h2>
         <p className="mb-1">
-          SaaS Engine is licensed as a one-time purchase via Lemon Squeezy.
-          Standard and Commercial licenses differ only in legal usage scope, not
-          in code or capabilities.
+          ExpirySignal is licensed as a one-time purchase via Lemon Squeezy.
+          License tiers differ only in legal usage scope, not in code or
+          capabilities.
         </p>
         <p>
           Store link:{' '}
@@ -127,11 +121,10 @@ export default function SaaSEnginePage() {
           </a>
         </p>
         <p className="text-[10px]">
-          Select the SaaS Engine license tier that matches your intended use
+          Select the ExpirySignal license tier that matches your intended use
           (single internal system vs. multiple internal systems/client work).
         </p>
       </section>
     </div>
   );
 }
-

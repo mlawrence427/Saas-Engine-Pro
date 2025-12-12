@@ -18,8 +18,9 @@ export default function Shell({ children }: ShellProps) {
 
           <nav className="ss-nav">
             <Link href="/saas-engine">SaaS Engine</Link>
-            <Link href="/accessoff">AccessOff</Link>
-            <Link href="/actiontimer">ActionTimer</Link>
+            <Link href="/deny-signal">DenySignal</Link>
+            <Link href="/expiry-signal">ExpirySignal</Link>
+            <Link href="/essay">Essay</Link>
           </nav>
         </div>
       </header>
@@ -38,3 +39,4 @@ export default function Shell({ children }: ShellProps) {
     </div>
   );
 }
+
