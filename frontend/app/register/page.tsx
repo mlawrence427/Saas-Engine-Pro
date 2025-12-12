@@ -16,7 +16,6 @@ import {
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
 
 type RegisterFormState = {
   name: string;
@@ -27,7 +26,6 @@ type RegisterFormState = {
 export default function RegisterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { toast } = useToast();
 
   const [form, setForm] = React.useState<RegisterFormState>({
     name: "",
@@ -35,130 +33,86 @@ export default function RegisterPage() {
     password: "",
   });
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
   const next = searchParams.get("next") || "/dashboard";
 
-  const handleChange =
-    (field: keyof RegisterFormState) =>
+  const handleChange = (field: keyof RegisterFormState) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [field]: event.target.value }));
+      setForm(prev => ({ ...prev, [field]: event.target.value }));
     };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.email || !form.password) {
-      toast({
-        variant: "destructive",
-        title: "Missing fields",
-        description: "Email and password are required.",
-      });
+    setErrorMessage(null);
+
+    if (!form.name || !form.email || !form.password) {
+      setErrorMessage("Please fill out all fields.");
       return;
     }
 
-    setIsSubmitting(true);
-
+    // 🧪 DEMO-ONLY: fake success, no backend call
     try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        // Backend should create user & set auth cookies.
-        body: JSON.stringify({
-          name: form.name || undefined,
-          email: form.email,
-          password: form.password,
-        }),
-      });
+      setIsSubmitting(true);
 
-      if (!response.ok) {
-        let message = "Registration failed.";
-        try {
-          const data = await response.json();
-          if (data?.error || data?.message) {
-            message = data.error || data.message;
-          }
-        } catch {
-          // ignore parse error
-        }
+      // Simulate a short network delay for realism
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        toast({
-          variant: "destructive",
-          title: "Could not create account",
-          description: message,
-        });
-        return;
-      }
-
-      toast({
-        title: "Account created",
-        description: "You’re now signed in to SaaS Engine Pro.",
-      });
-
-      router.push(next);
+      // Redirect to login (or straight to dashboard if you prefer)
+      router.push(`/login?next=${encodeURIComponent(next)}`);
       router.refresh();
     } catch (error) {
       console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Network error",
-        description:
-          "We couldn’t reach the server. Please check your connection and try again.",
-      });
+      setErrorMessage("Unexpected error while creating your account.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-slate-950 to-slate-900 px-4">
+      <div className="w-full max-w-lg">
+        <div className="mb-10 text-center space-y-2">
+          <p className="text-xs tracking-[0.35em] text-slate-400 uppercase">
             SaaS Engine Pro
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Create your founder console
+          <h1 className="text-3xl md:text-4xl font-semibold text-slate-50">
+            Create your control plane account
           </h1>
-          <p className="text-sm text-slate-400">
-            Spin up governed SaaS modules with AI — safely.
+          <p className="text-sm text-slate-400 max-w-md mx-auto">
+            Set up an owner account to manage AI modules, users, and plans.
           </p>
         </div>
 
-        <Card className="border-slate-800 bg-slate-950/60 backdrop-blur">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-lg">Create account</CardTitle>
-            <CardDescription>
-              We’ll create a new SaaS Engine Pro workspace for you.
+        <Card className="bg-slate-950/60 border-slate-800 text-slate-50">
+          <CardHeader>
+            <CardTitle>Register</CardTitle>
+            <CardDescription className="text-slate-400">
+              This creates an admin account inside your self-hosted control
+              plane. (Demo: this step is simulated.)
             </CardDescription>
           </CardHeader>
-
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div className="space-y-2">
-                <Label htmlFor="name">Name (optional)</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  autoComplete="name"
-                  placeholder="Alex Founder"
                   value={form.name}
                   onChange={handleChange("name")}
-                  disabled={isSubmitting}
-                  className="bg-slate-950/80 border-slate-800 focus-visible:ring-sky-500"
+                  placeholder="Your name"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Work email</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="you@company.com"
                   value={form.email}
                   onChange={handleChange("email")}
-                  disabled={isSubmitting}
-                  className="bg-slate-950/80 border-slate-800 focus-visible:ring-sky-500"
+                  placeholder="you@example.com"
                 />
               </div>
 
@@ -168,37 +122,37 @@ export default function RegisterPage() {
                   id="password"
                   type="password"
                   autoComplete="new-password"
-                  placeholder="••••••••"
                   value={form.password}
                   onChange={handleChange("password")}
-                  disabled={isSubmitting}
-                  className="bg-slate-950/80 border-slate-800 focus-visible:ring-sky-500"
+                  placeholder="••••••••"
                 />
               </div>
 
+              {errorMessage && (
+                <p className="text-sm text-red-400 mt-2">{errorMessage}</p>
+              )}
+
               <Button
                 type="submit"
-                className="w-full bg-sky-500 text-slate-950 hover:bg-sky-400"
+                className="w-full mt-4"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Creating workspace..." : "Create account"}
+                {isSubmitting ? "Creating account..." : "Create account"}
               </Button>
             </form>
           </CardContent>
-
-          <CardFooter className="flex flex-col items-center gap-2 text-sm text-slate-400">
-            <div className="flex items-center gap-1">
-              <span>Already have an account?</span>
-              <Link
-                href="/login"
-                className="font-medium text-sky-400 hover:text-sky-300"
-              >
-                Sign in
-              </Link>
-            </div>
+          <CardFooter className="flex justify-between text-xs text-slate-400">
+            <span>Already have an account?</span>
+            <Link
+              href="/login"
+              className="font-medium text-blue-400 hover:text-blue-300"
+            >
+              Sign in
+            </Link>
           </CardFooter>
         </Card>
       </div>
-    </main>
+    </div>
   );
 }
+

@@ -24,7 +24,7 @@ type Module = {
 };
 
 export default function DashboardPage() {
-  const { toast } = useToast();
+  //const { toast } = useToast();
 
   const [modules, setModules] = React.useState<Module[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
