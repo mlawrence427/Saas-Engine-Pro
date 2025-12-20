@@ -5,23 +5,27 @@ import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env";
 
-// Stripe webhook MUST be mounted before express.json()
+// Webhooks MUST be mounted before express.json()
 import stripeWebhookRouter from "./routes/stripe.webhooks";
 
-// ✅ Your real auth router lives here:
+// API routers
 import authRouter from "./api/auth/auth.routes";
-
-// Keep these if they exist in your repo:
 import billingRouter from "./routes/billing.routes";
 import modulesRouter from "./routes/module.registry.routes";
+import planTruthRouter from "./routes/plan.truth.routes";
 
 const app = express();
 
+// --------------------------------------------------
+// Core middleware
+// --------------------------------------------------
+
 app.use(morgan("dev"));
 
-// ✅ Needed because requireAuth reads req.cookies.token
+// Required for cookie-based JWT auth
 app.use(cookieParser());
 
+// CORS — explicit, credentialed
 app.use(
   cors({
     origin: env.FRONTEND_URL ?? "http://localhost:3000",
@@ -29,32 +33,58 @@ app.use(
   })
 );
 
+// --------------------------------------------------
+// Health check (deterministic, non-auth)
+// --------------------------------------------------
+
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     service: "saas-engine",
-    time_source: (env as any).TIME_SOURCE ?? "system",
+    TIME_SOURCE: z.enum(["system"]).default("system"),
   });
 });
 
-// ✅ Webhooks first (raw body)
+// --------------------------------------------------
+// Webhooks (RAW BODY ONLY)
+// --------------------------------------------------
+
 app.use("/api/webhooks", stripeWebhookRouter);
 
-// ✅ Everything else JSON
+// --------------------------------------------------
+// JSON body parsing (AFTER webhooks)
+// --------------------------------------------------
+
 app.use(express.json({ limit: "1mb" }));
 
-// ✅ Auth endpoints:
+// --------------------------------------------------
+// Auth
+// --------------------------------------------------
 // POST /api/auth/register
 // POST /api/auth/login
+// POST /api/auth/logout
 app.use("/api/auth", authRouter);
 
-// ✅ Other API areas
+// --------------------------------------------------
+// Core API surfaces
+// --------------------------------------------------
+
 app.use("/api/billing", billingRouter);
 app.use("/api/modules", modulesRouter);
 
-app.use((_req, res) => res.status(404).json({ error: "NOT_FOUND" }));
+// Plan truth — state emission only (no enforcement)
+app.use("/api/plan", planTruthRouter);
+
+// --------------------------------------------------
+// 404 (last)
+// --------------------------------------------------
+
+app.use((_req, res) => {
+  res.status(404).json({ error: "NOT_FOUND" });
+});
 
 export default app;
+
 
 
 

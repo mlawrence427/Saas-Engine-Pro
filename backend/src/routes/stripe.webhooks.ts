@@ -1,45 +1,48 @@
 // src/routes/stripe.webhooks.ts
-import express, { type Request, type Response } from 'express';
-import billingService from '../services/billing.service';
+import express, { type Request, type Response } from "express";
+import billingService from "../services/billing.service";
 
 const router = express.Router();
 
 /**
  * POST /api/webhooks/stripe
  *
- * Mounted in app.ts as:
- *   app.use('/api/webhooks', stripeWebhookRouter);
- *
- * We MUST use express.raw here so Stripe signature verification works.
+ * IMPORTANT:
+ * - Mounted BEFORE express.json() in app.ts
+ * - Uses express.raw() so Stripe signature verification works
+ * - This route is NOT authenticated
+ * - Failures return non-2xx so Stripe retries
  */
 router.post(
-  '/stripe',
-  express.raw({ type: 'application/json' }),
+  "/stripe",
+  express.raw({ type: "application/json" }),
   async (req: Request, res: Response): Promise<void> => {
-    const sig = req.headers['stripe-signature'];
+    const signature = req.headers["stripe-signature"];
 
-    if (!sig || typeof sig !== 'string') {
-      res.status(400).send('Missing Stripe signature');
+    if (!signature || typeof signature !== "string") {
+      res.status(400).send("Missing Stripe signature");
       return;
     }
 
     try {
-      // req.body is a Buffer because of express.raw()
+      // req.body is a Buffer due to express.raw()
       const result = await billingService.handleWebhook(
         req.body as Buffer,
-        sig
+        signature
       );
 
+      // Deterministic acknowledgement
       res.json(result);
     } catch (err) {
-      console.error('[stripe] Webhook handler error:', err);
-      // 4xx/5xx here will cause Stripe to retry, which is what we want on failure
-      res.status(400).send('Webhook handler error');
+      console.error("[stripe] webhook error:", err);
+      // Non-2xx causes Stripe retry (desired)
+      res.status(400).send("Webhook handler error");
     }
   }
 );
 
 export default router;
+
 
 
 

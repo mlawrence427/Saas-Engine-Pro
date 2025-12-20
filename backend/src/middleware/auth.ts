@@ -1,42 +1,49 @@
 // backend/src/middleware/auth.ts
 // Read JWT from cookie, verify, and attach user payload to req.user
 
-import type { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken, AuthTokenPayload } from '../utils/jwt';
-import { authenticationError } from '../utils/errors';
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: AuthTokenPayload;
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET missing or too short");
   }
+  return secret;
 }
 
-export async function requireAuth(
+export function requireAuth(
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction
-): Promise<void> {
+) {
   try {
-    const token = (req as any).cookies?.token as string | undefined;
+    let token: string | undefined;
 
-    console.log('🔐 requireAuth cookies:', (req as any).cookies);
+    // 1️⃣ Cookie auth (primary)
+    if (req.cookies?.token) {
+      token = req.cookies.token;
+    }
+
+    // 2️⃣ Bearer auth (fallback)
+    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+      token = req.headers.authorization.slice(7);
+    }
 
     if (!token) {
-      throw authenticationError('Invalid or expired token');
+      return res.status(401).json({ error: "UNAUTHORIZED" });
     }
 
-    const payload = verifyAccessToken(token);
+    const payload = jwt.verify(token, getJwtSecret()) as {
+      userId: string;
+    };
 
-    if (!payload || !payload.userId) {
-      throw authenticationError('Invalid or expired token');
-    }
-
-    req.user = payload;
+    // 👇 THIS must match login payload
+    (req as any).userId = payload.userId;
 
     next();
   } catch (err) {
-    console.error('❌ requireAuth error:', err);
-    next(authenticationError('Invalid or expired token'));
+    return res.status(401).json({ error: "UNAUTHORIZED" });
   }
 }
 

@@ -6,9 +6,6 @@ import jwt from "jsonwebtoken";
 
 const router = Router();
 
-/**
- * Read + validate JWT secret
- */
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret || secret.length < 32) {
@@ -40,12 +37,13 @@ router.post("/register", async (req, res) => {
     const created = await prisma.user.create({
       data: {
         email,
-        passwordHash,
+        passwordHash, // ✅ matches DB schema
         name: name ?? null,
       },
     });
 
     // never return passwordHash
+    // (cast to any in case Prisma type complains about destructuring)
     const { passwordHash: _ph, ...safeUser } = created as any;
 
     return res.status(200).json({ user: safeUser });
@@ -72,18 +70,16 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = await bcrypt.compare(password, (user as any).passwordHash);
     if (!valid) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const token = jwt.sign(
-      { userId: user.id },
-      getJwtSecret(),
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ userId: user.id }, getJwtSecret(), {
+      expiresIn: "7d",
+    });
 
-    // cookie expected by requireAuth
+    // set cookie expected by requireAuth
     res.cookie("token", token, {
       httpOnly: true,
       sameSite: "lax",
@@ -92,7 +88,7 @@ router.post("/login", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // return token for curl/debugging
+    // Return token too (useful for debugging / curl)
     return res.json({ token });
   } catch (err) {
     console.error("Login error:", err);
@@ -107,3 +103,4 @@ router.post("/logout", async (_req, res) => {
 });
 
 export default router;
+

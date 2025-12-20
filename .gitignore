@@ -15,6 +15,7 @@ out/
 .env.production
 backend/.env
 frontend/.env
+backend/cookies.txt
 
 # Debug logs
 npm-debug.log*
