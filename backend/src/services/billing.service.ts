@@ -1,317 +1,83 @@
-// src/services/billing.service.ts - PRODUCTION FIXED & CONSISTENT
+// backend/src/services/billing.service.ts
+// Stripe billing sync (webhook-driven) + DB-plan reconciliation
+//
+// Philosophy:
+// - Stripe webhooks WRITE facts into DB.
+// - Reads compute plan truth at request time.
+// - No enforcement beyond emitting/returning state.
 
-import Stripe from 'stripe';
-import { PlanTier } from '@prisma/client';
-import { prisma } from '../config/database';
-import { logger } from '../utils/logger';
-import { config } from '../config/env';
+import Stripe from "stripe";
+import { PlanTier } from "@prisma/client";
+import { prisma } from "../config/database";
+import { logger } from "../utils/logger";
+import { config } from "../config/env";
 
-// Use the same Stripe config as the rest of the app
 const stripe = new Stripe(config.stripe.secretKey, {
   apiVersion: config.stripe.apiVersion as Stripe.LatestApiVersion,
 });
 
 const webhookSecret = config.stripe.webhookSecret;
 
-// Default price we show in "plans" (use POWER = PRO plan)
-const defaultPriceId = config.stripe.pricePower;
+// Convenience aliases (these are optional strings; may be empty)
+const PRICE_DEFAULT = config.stripe.prices.default || "";
+const PRICE_PRO = config.stripe.prices.pro || "";
+const PRICE_ENTERPRISE = config.stripe.prices.enterprise || "";
 
-// ==========================
-// Plan / price helpers
-// ==========================
-
-// Map a Stripe price ID to an internal PlanTier.
-// These MUST match your .env / config.env:
-//
-//   STRIPE_PRICE_CORE   -> config.stripe.priceCore
-//   STRIPE_PRICE_POWER  -> config.stripe.pricePower
-//   STRIPE_PRICE_ELITE  -> config.stripe.priceElite
-//
-const PRICE_TO_PLAN: Record<string, PlanTier> = {
-  [config.stripe.priceCore]: 'FREE',       // or CORE if you rename plans later
-  [config.stripe.pricePower]: 'PRO',
-  [config.stripe.priceElite]: 'ENTERPRISE',
-};
-
+/**
+ * Map Stripe price ID -> internal PlanTier.
+ * If an unknown paid price appears, we default to PRO (conservative "paid" behavior).
+ * If no price is present, default to FREE.
+ */
 function mapPriceIdToPlan(priceId: string | undefined | null): PlanTier {
-  if (!priceId) return 'FREE';
-  return PRICE_TO_PLAN[priceId] ?? 'PRO'; // unknown paid price → PRO by default
+  if (!priceId) return "FREE";
+
+  if (PRICE_DEFAULT && priceId === PRICE_DEFAULT) return "FREE";
+  if (PRICE_PRO && priceId === PRICE_PRO) return "PRO";
+  if (PRICE_ENTERPRISE && priceId === PRICE_ENTERPRISE) return "ENTERPRISE";
+
+  // Unknown price: treat as paid unless you want fail-closed to FREE
+  return "PRO";
+}
+
+function isActiveStatus(status: Stripe.Subscription.Status): boolean {
+  return status === "active" || status === "trialing";
 }
 
 /**
- * Recompute the *effective* plan for a user based on ALL their subscriptions.
- * - If any subscription is active/trialing → plan from that subscription
- * - Otherwise → FREE
+ * Compute the effective plan for a user based on DB subscription facts only.
+ * - If any active/trialing subscription exists → plan derived from that subscription priceId
+ * - Else → FREE
  */
-async function recomputeEffectivePlanForUser(
-  userId: string
-): Promise<PlanTier> {
-  const activeSubscription = await prisma.stripeSubscription.findFirst({
+async function recomputeEffectivePlanForUser(userId: string): Promise<PlanTier> {
+  const activeSub = await prisma.stripeSubscription.findFirst({
     where: {
       userId,
-      status: { in: ['active', 'trialing'] },
+      status: { in: ["active", "trialing"] },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 
-  if (!activeSubscription) {
-    return 'FREE';
-  }
-
-  return mapPriceIdToPlan(activeSubscription.priceId ?? undefined);
+  if (!activeSub) return "FREE";
+  return mapPriceIdToPlan(activeSub.priceId ?? undefined);
 }
 
-export const billingService = {
-  // ==========================
-  // ✅ PLANS
-  // ==========================
-  getPlans() {
-    return [
-      {
-        id: defaultPriceId,
-        name: 'SaaS Engine Pro',
-        priceMonthly: 1999, // $19.99 or $1999 cents – adjust to your pricing
-        currency: 'usd',
-        interval: 'month',
-      },
-    ];
-  },
-
-  // ==========================
-  // ✅ BILLING INFO
-  // ==========================
-  async getBillingInfo(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        stripeCustomer: true,
-        subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
-      },
-    });
-
-    const subscription = user?.subscriptions[0];
-
-    return {
-      hasStripeCustomer: !!user?.stripeCustomer,
-      subscription: subscription
-        ? {
-            status: subscription.status,
-            priceId: subscription.priceId,
-            currentPeriodEnd: subscription.currentPeriodEnd,
-          }
-        : null,
-    };
-  },
-
-  // ==========================
-  // ✅ CREATE CHECKOUT
-  // ==========================
-  async createCheckoutSession({
-    userId,
-    priceId,
-    successUrl,
-    cancelUrl,
-  }: {
-    userId: string;
-    priceId: string;
-    successUrl: string;
-    cancelUrl: string;
-  }) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { stripeCustomer: true },
-    });
-
-    if (!user) throw new Error('User not found');
-
-    let stripeCustomerId = user.stripeCustomer?.customerId;
-
-    // ✅ Create Stripe customer if missing
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: { userId },
-      });
-
-      await prisma.stripeCustomer.create({
-        data: {
-          userId,
-          customerId: customer.id,
-        },
-      });
-
-      stripeCustomerId = customer.id;
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      customer: stripeCustomerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: { userId, priceId },
-      subscription_data: {
-        metadata: { userId },
-      },
-      allow_promotion_codes: true,
-    });
-
-    return { id: session.id, url: session.url };
-  },
-
-  // ==========================
-  // ✅ CUSTOMER PORTAL
-  // ==========================
-  async createPortalSession(userId: string, returnUrl: string) {
-    const customer = await prisma.stripeCustomer.findUnique({
-      where: { userId },
-    });
-
-    if (!customer) throw new Error('Stripe customer not found');
-
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: customer.customerId,
-      return_url: returnUrl,
-    });
-
-    return { url: portal.url };
-  },
-
-  // ==========================
-  // ✅ WEBHOOK HANDLER (SINGLE SOURCE OF TRUTH)
-  // ==========================
-  async handleWebhook(payload: Buffer, signature: string) {
-    const event = stripe.webhooks.constructEvent(
-      payload,
-      signature,
-      webhookSecret
-    );
-
-    logger.info(`Processing webhook: ${event.type}`, { eventId: event.id });
-
-    // ✅ Idempotency: skip already processed events
-    const existingEvent = await prisma.processedWebhookEvent.findUnique({
-      where: { id: event.id },
-    });
-
-    if (existingEvent) {
-      logger.info('Webhook already processed, skipping', {
-        eventId: event.id,
-      });
-      return { received: true, duplicate: true };
-    }
-
-    try {
-      switch (event.type) {
-        case 'checkout.session.completed':
-          await handleCheckoutSessionCompleted(
-            event.data.object as Stripe.Checkout.Session
-          );
-          break;
-
-        case 'customer.subscription.created':
-        case 'customer.subscription.updated':
-        case 'customer.subscription.deleted':
-          await syncSubscription(event.data.object as Stripe.Subscription);
-          break;
-
-        case 'invoice.payment_failed':
-          await handlePaymentFailed(event.data.object as Stripe.Invoice);
-          break;
-
-        // You can add more cases as needed
-      }
-
-      // ✅ Mark event as processed AFTER successful handling
-      await prisma.processedWebhookEvent.create({
-        data: { id: event.id, type: event.type },
-      });
-
-      logger.info('Webhook processed successfully', {
-        eventId: event.id,
-        type: event.type,
-      });
-    } catch (error) {
-      logger.error('Webhook processing failed', {
-        eventId: event.id,
-        type: event.type,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      // Re-throw to trigger Stripe retry
-      throw error;
-    }
-
-    return { received: true };
-  },
-
-  // ==========================
-  // ✅ MANUAL PLAN SYNC (for /api/billing/sync)
-  // ==========================
-  async syncUserPlan(userId: string): Promise<PlanTier> {
-    const plan = await recomputeEffectivePlanForUser(userId);
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { plan },
-    });
-
-    logger.info('Manual subscription sync triggered', {
-      userId,
-      effectivePlan: plan,
-    });
-
-    return plan;
-  },
-};
-
-export default billingService;
-
-// ======================================================
-// ✅ HELPERS
-// ======================================================
-
-async function handleCheckoutSessionCompleted(
-  session: Stripe.Checkout.Session
-) {
-  const userId = session.metadata?.userId;
-  const stripeSubscriptionId = session.subscription as string | null;
-
-  if (!userId || !stripeSubscriptionId) {
-    logger.warn('Checkout session missing metadata', {
-      sessionId: session.id,
-      hasUserId: !!userId,
-      hasSubscriptionId: !!stripeSubscriptionId,
-    });
-    return;
-  }
-
-  const subscription = await stripe.subscriptions.retrieve(
-    stripeSubscriptionId
-  );
-  await syncSubscription(subscription);
-
-  logger.info('✅ Checkout completed and subscription synced', {
-    userId,
-    subscriptionId: stripeSubscriptionId,
-  });
-}
-
-// ✅ Resolve userId from subscription with fallback to customer lookup
-async function resolveUserId(
+/**
+ * Resolve the internal userId for a Stripe subscription.
+ * Prefer subscription.metadata.userId, fallback to StripeCustomer table via customerId.
+ */
+async function resolveUserIdForSubscription(
   subscription: Stripe.Subscription
 ): Promise<string | null> {
-  // Try metadata first
-  const userId = subscription.metadata?.userId;
-  if (userId) return userId;
+  const metaUserId = subscription.metadata?.userId;
+  if (metaUserId) return metaUserId;
 
-  // Fallback - lookup by Stripe customer ID
   const customerId =
-    typeof subscription.customer === 'string'
+    typeof subscription.customer === "string"
       ? subscription.customer
       : subscription.customer?.id;
 
   if (!customerId) {
-    logger.error('🚨 Subscription has no customer ID', {
+    logger.error("Subscription has no customer ID", {
       subscriptionId: subscription.id,
     });
     return null;
@@ -321,8 +87,8 @@ async function resolveUserId(
     where: { customerId },
   });
 
-  if (stripeCustomer) {
-    logger.info('Recovered userId from StripeCustomer table', {
+  if (stripeCustomer?.userId) {
+    logger.info("Recovered userId from StripeCustomer", {
       subscriptionId: subscription.id,
       customerId,
       userId: stripeCustomer.userId,
@@ -333,32 +99,29 @@ async function resolveUserId(
   return null;
 }
 
-// ✅ Main sync function with proper User.plan update
-async function syncSubscription(subscription: Stripe.Subscription) {
-  const userId = await resolveUserId(subscription);
+/**
+ * Upsert subscription in DB + update user's effective plan atomically.
+ */
+async function syncSubscriptionToDb(subscription: Stripe.Subscription) {
+  const userId = await resolveUserIdForSubscription(subscription);
 
   if (!userId) {
-    // Log critical error instead of silent failure
-    logger.error('🚨 CRITICAL: Cannot sync subscription - userId not found', {
+    logger.error("CRITICAL: Cannot sync subscription - userId not found", {
       subscriptionId: subscription.id,
-      customerId: subscription.customer,
       status: subscription.status,
+      customer: subscription.customer,
       metadata: subscription.metadata,
     });
-    // Throw to trigger webhook retry - Stripe will retry up to ~3 days
-    throw new Error(
-      `Cannot sync subscription ${subscription.id}: userId not found`
-    );
+    // Throw so Stripe retries webhook delivery
+    throw new Error(`Cannot sync subscription ${subscription.id}: userId not found`);
   }
 
-  const priceId = subscription.items.data[0]?.price.id ?? null;
-  const plan = mapPriceIdToPlan(priceId);
+  const priceId = subscription.items.data[0]?.price?.id ?? null;
+  const mappedPlan = mapPriceIdToPlan(priceId ?? undefined);
 
-  // Determine plan based on subscription status
-  const isActivePlan = ['active', 'trialing'].includes(subscription.status);
-  const effectivePlan: PlanTier = isActivePlan ? plan : 'FREE';
+  const active = isActiveStatus(subscription.status);
+  const effectivePlan: PlanTier = active ? mappedPlan : "FREE";
 
-  // Update BOTH StripeSubscription AND User.plan atomically
   await prisma.$transaction([
     prisma.stripeSubscription.upsert({
       where: { stripeId: subscription.id },
@@ -385,23 +148,22 @@ async function syncSubscription(subscription: Stripe.Subscription) {
 
     prisma.auditLog.create({
       data: {
-        action: isActivePlan ? 'PLAN_UPGRADED' : 'PLAN_DOWNGRADED',
-        entityType: 'SUBSCRIPTION',
+        action: active ? "PLAN_UPGRADED" : "PLAN_DOWNGRADED",
+        entityType: "SUBSCRIPTION",
         entityId: subscription.id,
-        performedByUserId: null, // System action
+        performedByUserId: null,
         metadata: {
           userId,
           subscriptionId: subscription.id,
           status: subscription.status,
           priceId,
           effectivePlan,
-          previousPlan: null, // could fetch if needed
         },
       },
     }),
   ]);
 
-  logger.info('✅ Subscription and user plan synced', {
+  logger.info("Subscription synced", {
     subscriptionId: subscription.id,
     userId,
     status: subscription.status,
@@ -410,17 +172,36 @@ async function syncSubscription(subscription: Stripe.Subscription) {
   });
 }
 
-// ✅ Handle failed payments
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  const userId = session.metadata?.userId;
+  const stripeSubscriptionId = session.subscription as string | null;
+
+  if (!userId || !stripeSubscriptionId) {
+    logger.warn("Checkout session missing metadata", {
+      sessionId: session.id,
+      hasUserId: !!userId,
+      hasSubscriptionId: !!stripeSubscriptionId,
+    });
+    return;
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  await syncSubscriptionToDb(subscription);
+
+  logger.info("Checkout completed and subscription synced", {
+    userId,
+    subscriptionId: stripeSubscriptionId,
+  });
+}
+
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
   const customerId =
-    typeof invoice.customer === 'string'
+    typeof invoice.customer === "string"
       ? invoice.customer
       : invoice.customer?.id;
 
   if (!customerId) {
-    logger.warn('Payment failed invoice has no customer', {
-      invoiceId: invoice.id,
-    });
+    logger.warn("Payment failed invoice has no customer", { invoiceId: invoice.id });
     return;
   }
 
@@ -429,22 +210,223 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
   });
 
   if (!stripeCustomer) {
-    logger.warn('Payment failed for unknown customer', {
+    logger.warn("Payment failed for unknown customer", {
       customerId,
       invoiceId: invoice.id,
     });
     return;
   }
 
-  logger.warn('💳 Payment failed', {
+  logger.warn("Payment failed", {
     userId: stripeCustomer.userId,
     invoiceId: invoice.id,
     amountDue: invoice.amount_due,
     attemptCount: invoice.attempt_count,
   });
 
-  // Optional: send notification, update UI state, etc.
-  // The subscription.updated webhook will handle plan downgrade when status changes
+  // The subscription.updated webhook will handle any eventual status change -> plan update.
 }
+
+export const billingService = {
+  /**
+   * Plans shown to the frontend.
+   * This is “display data” for demo flows.
+   *
+   * If STRIPE_PRICE_PRO etc are not configured, we still return a safe stub.
+   */
+  getPlans() {
+    return [
+      {
+        id: PRICE_PRO || "price_not_configured",
+        name: "SaaS Engine",
+        priceMonthly: 1999,
+        currency: "usd",
+        interval: "month",
+      },
+    ];
+  },
+
+  async getBillingInfo(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        stripeCustomer: true,
+        subscriptions: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
+    });
+
+    const subscription = user?.subscriptions[0];
+
+    return {
+      hasStripeCustomer: !!user?.stripeCustomer,
+      subscription: subscription
+        ? {
+            status: subscription.status,
+            priceId: subscription.priceId,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+          }
+        : null,
+    };
+  },
+
+  /**
+   * Create Stripe Checkout session (subscription mode).
+   * Requires STRIPE_SECRET_KEY to be valid.
+   */
+  async createCheckoutSession({
+    userId,
+    priceId,
+    successUrl,
+    cancelUrl,
+  }: {
+    userId: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+  }) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { stripeCustomer: true },
+    });
+
+    if (!user) throw new Error("User not found");
+
+    let stripeCustomerId = user.stripeCustomer?.customerId;
+
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId },
+      });
+
+      await prisma.stripeCustomer.create({
+        data: {
+          userId,
+          customerId: customer.id,
+        },
+      });
+
+      stripeCustomerId = customer.id;
+    }
+
+    if (!priceId || priceId === "price_not_configured") {
+      throw new Error("Stripe priceId not configured. Set STRIPE_PRICE_PRO (or pass a real priceId).");
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: stripeCustomerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: { userId, priceId },
+      subscription_data: {
+        metadata: { userId },
+      },
+      allow_promotion_codes: true,
+    });
+
+    return { id: session.id, url: session.url };
+  },
+
+  async createPortalSession(userId: string, returnUrl: string) {
+    const customer = await prisma.stripeCustomer.findUnique({
+      where: { userId },
+    });
+
+    if (!customer) throw new Error("Stripe customer not found");
+
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customer.customerId,
+      return_url: returnUrl,
+    });
+
+    return { url: portal.url };
+  },
+
+  /**
+   * Stripe webhook entrypoint.
+   * - verifies signature
+   * - idempotency via ProcessedWebhookEvent
+   * - syncs subscription facts into DB
+   */
+  async handleWebhook(payload: Buffer, signature: string) {
+    const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+
+    logger.info(`Processing webhook: ${event.type}`, { eventId: event.id });
+
+    const existingEvent = await prisma.processedWebhookEvent.findUnique({
+      where: { id: event.id },
+    });
+
+    if (existingEvent) {
+      logger.info("Webhook already processed, skipping", { eventId: event.id });
+      return { received: true, duplicate: true };
+    }
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed":
+          await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+          break;
+
+        case "customer.subscription.created":
+        case "customer.subscription.updated":
+        case "customer.subscription.deleted":
+          await syncSubscriptionToDb(event.data.object as Stripe.Subscription);
+          break;
+
+        case "invoice.payment_failed":
+          await handlePaymentFailed(event.data.object as Stripe.Invoice);
+          break;
+
+        default:
+          // No-op
+          break;
+      }
+
+      await prisma.processedWebhookEvent.create({
+        data: { id: event.id, type: event.type },
+      });
+
+      logger.info("Webhook processed successfully", {
+        eventId: event.id,
+        type: event.type,
+      });
+    } catch (error) {
+      logger.error("Webhook processing failed", {
+        eventId: event.id,
+        type: event.type,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    }
+
+    return { received: true };
+  },
+
+  /**
+   * Manual recompute from DB facts only.
+   * This does NOT call Stripe. It's deterministic based on stored subscriptions.
+   */
+  async syncUserPlan(userId: string): Promise<PlanTier> {
+    const plan = await recomputeEffectivePlanForUser(userId);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { plan },
+    });
+
+    logger.info("Manual plan recompute from DB facts", {
+      userId,
+      effectivePlan: plan,
+    });
+
+    return plan;
+  },
+};
+
+export default billingService;
+
 
 

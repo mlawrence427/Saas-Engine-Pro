@@ -1,59 +1,63 @@
 // backend/src/app.ts
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import { env } from "./config/env";
 
-import express from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import morgan from 'morgan';
+// Stripe webhook MUST be mounted before express.json()
+import stripeWebhookRouter from "./routes/stripe.webhooks";
 
-import authRoutes from './routes/auth';
-import billingRoutes from './routes/billing.routes'; // if present
-// import other route files as needed...
+// ✅ Your real auth router lives here:
+import authRouter from "./api/auth/auth.routes";
+
+// Keep these if they exist in your repo:
+import billingRouter from "./routes/billing.routes";
+import modulesRouter from "./routes/module.registry.routes";
 
 const app = express();
 
-// -----------------------------------------------------------
-// CORS – allow Next.js frontend (http://localhost:3000)
-// to send credentials (cookies) to backend (http://localhost:4000)
-// -----------------------------------------------------------
+app.use(morgan("dev"));
 
-const FRONTEND_ORIGIN =
-  process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+// ✅ Needed because requireAuth reads req.cookies.token
+app.use(cookieParser());
 
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
-    credentials: true, // allow cookies
+    origin: env.FRONTEND_URL ?? "http://localhost:3000",
+    credentials: true,
   })
 );
 
-// -----------------------------------------------------------
-// Global middleware
-// -----------------------------------------------------------
-
-app.use(cookieParser());
-app.use(express.json());
-app.use(morgan('dev'));
-
-// -----------------------------------------------------------
-// Health check
-// -----------------------------------------------------------
-
-app.get('/health', (_req, res) => {
-  res.json({ ok: true });
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "saas-engine",
+    time_source: (env as any).TIME_SOURCE ?? "system",
+  });
 });
 
-// -----------------------------------------------------------
-// API routes
-// -----------------------------------------------------------
+// ✅ Webhooks first (raw body)
+app.use("/api/webhooks", stripeWebhookRouter);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/billing', billingRoutes); // if you have this
+// ✅ Everything else JSON
+app.use(express.json({ limit: "1mb" }));
 
-// TODO: attach error-handling middleware if you have it
-// import { errorHandler } from './middleware/error-handler';
-// app.use(errorHandler);
+// ✅ Auth endpoints:
+// POST /api/auth/register
+// POST /api/auth/login
+app.use("/api/auth", authRouter);
+
+// ✅ Other API areas
+app.use("/api/billing", billingRouter);
+app.use("/api/modules", modulesRouter);
+
+app.use((_req, res) => res.status(404).json({ error: "NOT_FOUND" }));
 
 export default app;
+
+
+
 
 
 
